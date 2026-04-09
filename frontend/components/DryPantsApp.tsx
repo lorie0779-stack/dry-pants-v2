@@ -100,18 +100,22 @@ const POKEBALL_IMG =
 const LUCKY_EGG_IMG =
   "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/lucky-egg.png";
 
+// 完整傳說池（50 隻）；每輪從中隨機取 ROUND_SIZE 隻
 const LEGENDARY_POOL = [
-  { id: 150, name: "超夢" },
+  // Gen 1
   { id: 144, name: "急凍鳥" },
   { id: 145, name: "閃電鳥" },
   { id: 146, name: "火焰鳥" },
+  { id: 150, name: "超夢" },
   { id: 151, name: "夢幻" },
+  // Gen 2
   { id: 243, name: "雷公" },
   { id: 244, name: "炎帝" },
   { id: 245, name: "水君" },
   { id: 249, name: "洛奇亞" },
   { id: 250, name: "鳳王" },
   { id: 251, name: "時拉比" },
+  // Gen 3
   { id: 377, name: "雷吉洛克" },
   { id: 378, name: "雷吉艾斯" },
   { id: 379, name: "雷吉斯奇魯" },
@@ -122,6 +126,7 @@ const LEGENDARY_POOL = [
   { id: 384, name: "烈空坐" },
   { id: 385, name: "基拉祈" },
   { id: 386, name: "代歐奇希斯" },
+  // Gen 4
   { id: 483, name: "帝牙盧卡" },
   { id: 484, name: "帕路奇亞" },
   { id: 487, name: "騎拉帝納" },
@@ -129,9 +134,46 @@ const LEGENDARY_POOL = [
   { id: 492, name: "謝米" },
   { id: 493, name: "阿爾宙斯" },
   { id: 494, name: "比克提尼" },
+  // Gen 5
   { id: 643, name: "萊希拉姆" },
   { id: 644, name: "捷克羅姆" },
+  { id: 645, name: "土地雲" },
+  { id: 646, name: "酋雷姆" },
+  { id: 647, name: "凱路迪歐" },
+  { id: 648, name: "美露頓" },
+  { id: 649, name: "蓋諾賽克特" },
+  // Gen 6
+  { id: 716, name: "哲爾尼亞斯" },
+  { id: 717, name: "伊裂卡戎" },
+  { id: 718, name: "基格爾德" },
+  { id: 719, name: "迪安希" },
+  { id: 720, name: "胡帕" },
+  { id: 721, name: "薩戮達" },
+  // Gen 7
+  { id: 791, name: "索爾迦雷歐" },
+  { id: 792, name: "露奈雅拉" },
+  { id: 800, name: "奈克洛茲馬" },
+  { id: 801, name: "瑪夏多" },
+  { id: 802, name: "馬席夫" },
+  { id: 807, name: "澤拉歐拉" },
+  // Gen 8
+  { id: 888, name: "蒼響" },
+  { id: 889, name: "藏瑪然特" },
+  { id: 890, name: "無極汰那" },
 ];
+
+/** 每輪從完整池隨機抽取的數量 */
+const ROUND_SIZE = 30;
+
+/** Fisher-Yates 洗牌，從完整池隨機選取 ROUND_SIZE 個索引 */
+function makeSlotOrder(): number[] {
+  const indices = Array.from({ length: LEGENDARY_POOL.length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices.slice(0, ROUND_SIZE);
+}
 
 const EVOLUTION_STAGES = [
   { id: 4, name: "小火龍" },
@@ -336,7 +378,7 @@ export function DryPantsApp() {
   const [coins, setCoins] = useState(0);
   const [unlockedCount, setUnlockedCount] = useState(0);
   const [slotOrder, setSlotOrder] = useState<number[]>(
-    () => Array.from({ length: LEGENDARY_POOL.length }, (_, i) => i)
+    () => Array.from({ length: ROUND_SIZE }, (_, i) => i)
   );
   const [collectionMsg, setCollectionMsg] = useState<string | null>(null);
   const [honorEntries, setHonorEntries] = useState<{ time: string; text: string }[]>([]);
@@ -378,13 +420,14 @@ export function DryPantsApp() {
     setTimeout(() => setCollectionMsg(null), ms);
   };
 
-  // 統一處理傳說寶可夢增加；集滿 30 隻後再得第 31 隻，清空全部並兌換扭蛋幣
+  // 統一處理傳說寶可夢增加；集滿 ROUND_SIZE 後清空並兌換扭蛋幣，同時產生新隨機排列
   const gainLegendaries = (n: number, gainMsg?: string) => {
     const newTotal = unlockedCount + n;
-    if (newTotal > LEGENDARY_POOL.length) {
-      const coinsGained = Math.floor(newTotal / LEGENDARY_POOL.length);
-      const remainder = newTotal % LEGENDARY_POOL.length;
+    if (newTotal > ROUND_SIZE) {
+      const coinsGained = Math.floor(newTotal / ROUND_SIZE);
+      const remainder = newTotal % ROUND_SIZE;
       setUnlockedCount(remainder);
+      setSlotOrder(makeSlotOrder()); // 新一輪：從 50 隻裡重新隨機抽 30 隻
       setCoins((c) => c + coinsGained);
       showMsg(`🌈 集齊傳說！清空兌換 ${coinsGained} 顆扭蛋！`, 3500);
     } else {
@@ -546,7 +589,7 @@ export function DryPantsApp() {
               <section className="rounded-3xl bg-white p-4 shadow-md">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-sm font-black text-slate-800">
-                    🏆 傳說寶可夢 ({unlockedCount}/{LEGENDARY_POOL.length})
+                    🏆 傳說寶可夢 ({unlockedCount}/{ROUND_SIZE})
                   </h2>
                   <span className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-900 ring-2 ring-violet-400">
                     <img src={LUCKY_EGG_IMG} alt="扭蛋幣" className="h-4 w-4" />

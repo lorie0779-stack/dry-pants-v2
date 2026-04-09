@@ -19,13 +19,13 @@ from schemas import (
     HonorEntryOut,
 )
 
-LEGENDARY_POOL_SIZE = 30
+FULL_POOL_SIZE = 50   # 完整傳說池大小
+ROUND_SIZE = 30       # 每輪隨機取的數量
 
 
 def _make_slot_order() -> str:
-    order = list(range(LEGENDARY_POOL_SIZE))
-    random.shuffle(order)
-    return json.dumps(order)
+    """從 FULL_POOL_SIZE 中隨機抽取 ROUND_SIZE 個不重複索引"""
+    return json.dumps(random.sample(range(FULL_POOL_SIZE), ROUND_SIZE))
 
 
 DEFAULT_REASON_SEEDS = [
@@ -169,7 +169,7 @@ def _state_to_out(row: CollectionState) -> CollectionStateOut:
         energy=row.energy,
         unlocked_count=row.unlocked_count,
         coins=row.coins,
-        slot_order=json.loads(row.slot_order) if row.slot_order else list(range(LEGENDARY_POOL_SIZE)),
+        slot_order=json.loads(row.slot_order) if row.slot_order else list(range(ROUND_SIZE)),
     )
 
 
