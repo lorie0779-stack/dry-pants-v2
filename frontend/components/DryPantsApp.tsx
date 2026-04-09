@@ -344,6 +344,21 @@ export function DryPantsApp() {
     setTimeout(() => setCollectionMsg(null), ms);
   };
 
+  // 統一處理傳說寶可夢增加；集滿 30 隻後再得第 31 隻，清空全部並兌換扭蛋幣
+  const gainLegendaries = (n: number, gainMsg?: string) => {
+    const newTotal = unlockedCount + n;
+    if (newTotal > LEGENDARY_POOL.length) {
+      const coinsGained = Math.floor(newTotal / LEGENDARY_POOL.length);
+      const remainder = newTotal % LEGENDARY_POOL.length;
+      setUnlockedCount(remainder);
+      setCoins((c) => c + coinsGained);
+      showMsg(`🌈 集齊傳說！清空兌換 ${coinsGained} 顆扭蛋！`, 3500);
+    } else {
+      setUnlockedCount(newTotal);
+      showMsg(gainMsg ?? `🌟 解鎖了 ${n} 隻傳說寶可夢！`);
+    }
+  };
+
   // 增加能量；5 格全亮後，再加第 6 個能量才兌換傳說寶可夢並清空
   const addEnergy = (n: number) => {
     const total = energy + n;
@@ -351,18 +366,16 @@ export function DryPantsApp() {
       const gained = Math.floor(total / 5);
       const remainder = total % 5;
       setEnergy(remainder);
-      setUnlockedCount((u) => Math.min(LEGENDARY_POOL.length, u + gained));
-      showMsg(`⭐ 能量滿格！兌換了 ${gained} 隻傳說寶可夢！`);
+      gainLegendaries(gained, `⭐ 能量滿格！兌換了 ${gained} 隻傳說寶可夢！`);
     } else {
       setEnergy(total);
       showMsg(`✅ +${n} 能量！（${total}/5）`);
     }
   };
 
-  // 直接解鎖傳說寶可夢（隨機，視覺上依序解鎖）
+  // 直接解鎖傳說寶可夢（視覺上依序解鎖）
   const addLegendaries = (n: number) => {
-    setUnlockedCount((u) => Math.min(LEGENDARY_POOL.length, u + n));
-    showMsg(`🌟 解鎖了 ${n} 隻傳說寶可夢！`);
+    gainLegendaries(n);
   };
 
   const handleRedeemClick = () => {
@@ -465,6 +478,13 @@ export function DryPantsApp() {
 
   return (
     <div className="min-h-screen bg-[#7ae84a] pb-36 text-slate-900">
+      {collectionMsg && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-6">
+          <div className="animate-bounce rounded-3xl bg-amber-100 px-8 py-5 text-center text-sm font-bold text-amber-900 shadow-2xl ring-2 ring-amber-400">
+            {collectionMsg}
+          </div>
+        </div>
+      )}
       <div className="bg-gradient-to-b from-sky-300 via-sky-200/80 to-[#7ae84a] px-3 pb-3 pt-5">
         <h1 className="font-pixel-title px-1 text-center text-sm leading-snug text-slate-900 sm:text-base">
           Ryder 的乾爽大冒險
@@ -543,12 +563,6 @@ export function DryPantsApp() {
                     })}
                   </div>
                 </div>
-
-                {collectionMsg && (
-                  <div className="mt-4 rounded-2xl bg-amber-100 px-3 py-2 text-center text-xs font-bold text-amber-900 ring-1 ring-amber-300">
-                    {collectionMsg}
-                  </div>
-                )}
 
                 <div className="mt-3 space-y-2.5">
                   <button
