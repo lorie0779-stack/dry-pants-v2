@@ -82,6 +82,7 @@ class CollectionStateOut(BaseModel):
     energy: int
     unlocked_count: int
     coins: int
+    slot_order: list[int]
 
     model_config = {"from_attributes": True}
 
@@ -90,6 +91,7 @@ class CollectionStateIn(BaseModel):
     energy: int
     unlocked_count: int
     coins: int
+    slot_order: list[int]
 
 
 class HonorEntryOut(BaseModel):

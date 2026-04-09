@@ -335,6 +335,9 @@ export function DryPantsApp() {
   const [energy, setEnergy] = useState(0);
   const [coins, setCoins] = useState(0);
   const [unlockedCount, setUnlockedCount] = useState(0);
+  const [slotOrder, setSlotOrder] = useState<number[]>(
+    () => Array.from({ length: LEGENDARY_POOL.length }, (_, i) => i)
+  );
   const [collectionMsg, setCollectionMsg] = useState<string | null>(null);
   const [honorEntries, setHonorEntries] = useState<{ time: string; text: string }[]>([]);
   const [showRedeemInput, setShowRedeemInput] = useState(false);
@@ -348,6 +351,7 @@ export function DryPantsApp() {
         setEnergy(state.energy);
         setUnlockedCount(state.unlocked_count);
         setCoins(state.coins);
+        setSlotOrder(state.slot_order);
         setHonorEntries(
           entries.map((e) => ({ time: e.entry_time, text: e.entry_text }))
         );
@@ -361,8 +365,13 @@ export function DryPantsApp() {
   // 狀態變更時自動儲存到後端（跳過初次載入前的預設值）
   useEffect(() => {
     if (!stateLoaded.current) return;
-    saveCollectionState({ energy, unlocked_count: unlockedCount, coins }).catch(() => {});
-  }, [energy, unlockedCount, coins]);
+    saveCollectionState({
+      energy,
+      unlocked_count: unlockedCount,
+      coins,
+      slot_order: slotOrder,
+    }).catch(() => {});
+  }, [energy, unlockedCount, coins, slotOrder]);
 
   const showMsg = (msg: string, ms = 2500) => {
     setCollectionMsg(msg);
@@ -545,8 +554,8 @@ export function DryPantsApp() {
                   </span>
                 </div>
                 <div className="grid grid-cols-6 gap-1.5">
-                  {LEGENDARY_POOL.map((_, i) => (
-                    <PokeTile key={i} index={i} unlocked={i < unlockedCount} />
+                  {slotOrder.map((poolIndex, i) => (
+                    <PokeTile key={poolIndex} index={poolIndex} unlocked={i < unlockedCount} />
                   ))}
                 </div>
 
@@ -1020,12 +1029,15 @@ export function DryPantsApp() {
             className="underline decoration-red-500"
             onClick={async () => {
               if (!window.confirm("確定要重置所有進度？此操作無法還原。")) return;
-              await resetCollectionState().catch(() => {});
               stateLoaded.current = false;
+              await resetCollectionState().catch(() => {});
+              // 重新取得後端產生的新 slot_order
+              const fresh = await fetchCollectionState().catch(() => null);
               setEnergy(0);
               setUnlockedCount(0);
               setCoins(0);
               setHonorEntries([]);
+              if (fresh) setSlotOrder(fresh.slot_order);
               stateLoaded.current = true;
               showMsg("🔄 已重置所有進度");
             }}

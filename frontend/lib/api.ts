@@ -71,6 +71,7 @@ export type CollectionStateDTO = {
   energy: number;
   unlocked_count: number;
   coins: number;
+  slot_order: number[];
 };
 
 export type HonorEntryDTO = {

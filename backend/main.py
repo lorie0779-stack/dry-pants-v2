@@ -1,3 +1,6 @@
+import json
+import random
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
@@ -15,6 +18,15 @@ from schemas import (
     HonorEntryIn,
     HonorEntryOut,
 )
+
+LEGENDARY_POOL_SIZE = 30
+
+
+def _make_slot_order() -> str:
+    order = list(range(LEGENDARY_POOL_SIZE))
+    random.shuffle(order)
+    return json.dumps(order)
+
 
 DEFAULT_REASON_SEEDS = [
     "廁所都有人",
@@ -41,6 +53,14 @@ def init_db() -> None:
     with engine.connect() as conn:
         try:
             conn.execute(text("ALTER TABLE error_records ADD COLUMN incident_date DATE"))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
+    # Migration: add slot_order column to collection_state
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE collection_state ADD COLUMN slot_order VARCHAR(256)"))
             conn.commit()
         except Exception:
             pass  # column already exists
@@ -144,15 +164,28 @@ def health() -> dict[str, str]:
 
 # ── Collection State ──────────────────────────────────────────────────────────
 
+def _state_to_out(row: CollectionState) -> CollectionStateOut:
+    return CollectionStateOut(
+        energy=row.energy,
+        unlocked_count=row.unlocked_count,
+        coins=row.coins,
+        slot_order=json.loads(row.slot_order) if row.slot_order else list(range(LEGENDARY_POOL_SIZE)),
+    )
+
+
 @app.get("/api/collection-state", response_model=CollectionStateOut)
 def get_collection_state(db: Session = Depends(get_db)) -> CollectionStateOut:
     row = db.get(CollectionState, 1)
     if row is None:
-        row = CollectionState(id=1, energy=0, unlocked_count=0, coins=0)
+        row = CollectionState(id=1, energy=0, unlocked_count=0, coins=0, slot_order=_make_slot_order())
         db.add(row)
         db.commit()
         db.refresh(row)
-    return CollectionStateOut.model_validate(row)
+    elif row.slot_order is None:
+        row.slot_order = _make_slot_order()
+        db.commit()
+        db.refresh(row)
+    return _state_to_out(row)
 
 
 @app.put("/api/collection-state", response_model=CollectionStateOut)
@@ -166,9 +199,10 @@ def save_collection_state(
     row.energy = payload.energy
     row.unlocked_count = payload.unlocked_count
     row.coins = payload.coins
+    row.slot_order = json.dumps(payload.slot_order)
     db.commit()
     db.refresh(row)
-    return CollectionStateOut.model_validate(row)
+    return _state_to_out(row)
 
 
 @app.get("/api/honor-entries", response_model=list[HonorEntryOut])
@@ -200,6 +234,7 @@ def reset_collection_state(db: Session = Depends(get_db)) -> None:
     row.energy = 0
     row.unlocked_count = 0
     row.coins = 0
+    row.slot_order = _make_slot_order()  # 重置時產生新隨機排列
     db.commit()
 
 
