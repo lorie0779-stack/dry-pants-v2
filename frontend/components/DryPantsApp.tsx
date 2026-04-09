@@ -131,11 +131,11 @@ const EVOLUTION_STAGES = [
   { id: 4, name: "小火龍" },
   { id: 5, name: "火恐龍" },
   { id: 6, name: "噴火龍" },
-  { id: 10035, name: "超級噴火龍 X" },
-  { id: 10034, name: "超級噴火龍 Y" },
+  { id: 10034, name: "超級噴火龍 X" },
+  { id: 10035, name: "超級噴火龍 Y" },
 ];
 
-const HONOR_ENTRIES = [
+const INITIAL_HONOR_ENTRIES = [
   { time: "2026/3/21 15:33", text: "兌換：寶可夢卡包一包" },
   { time: "2026/3/16 20:52", text: "兌換：品客洋芋片" },
   { time: "2026/2/18 11:48", text: "兌換：海豹扭蛋" },
@@ -335,26 +335,54 @@ export function DryPantsApp() {
   const [coins, setCoins] = useState(1);
   const [unlockedCount, setUnlockedCount] = useState(1);
   const [collectionMsg, setCollectionMsg] = useState<string | null>(null);
+  const [honorEntries, setHonorEntries] = useState(INITIAL_HONOR_ENTRIES);
+  const [showRedeemInput, setShowRedeemInput] = useState(false);
+  const [redeemText, setRedeemText] = useState("");
 
-  const addEnergy = (n: number, msg: string) => {
-    setEnergy((prev) => {
-      const next = Math.min(5, prev + n);
-      setCollectionMsg(next === prev ? "能量已滿！" : msg);
-      return next;
-    });
-    setTimeout(() => setCollectionMsg(null), 2000);
+  const showMsg = (msg: string, ms = 2500) => {
+    setCollectionMsg(msg);
+    setTimeout(() => setCollectionMsg(null), ms);
   };
 
-  const handleRedeem = () => {
+  // 增加能量；每滿 5 格自動兌換一隻傳說寶可夢並清零
+  const addEnergy = (n: number) => {
+    const total = energy + n;
+    if (total >= 5) {
+      const gained = Math.floor(total / 5);
+      const remainder = total % 5;
+      setEnergy(remainder);
+      setUnlockedCount((u) => Math.min(LEGENDARY_POOL.length, u + gained));
+      showMsg(`⭐ 能量滿格！兌換了 ${gained} 隻傳說寶可夢！`);
+    } else {
+      setEnergy(total);
+      showMsg(`✅ +${n} 能量！（${total}/5）`);
+    }
+  };
+
+  // 直接解鎖傳說寶可夢（隨機，視覺上依序解鎖）
+  const addLegendaries = (n: number) => {
+    setUnlockedCount((u) => Math.min(LEGENDARY_POOL.length, u + n));
+    showMsg(`🌟 解鎖了 ${n} 隻傳說寶可夢！`);
+  };
+
+  const handleRedeemClick = () => {
     if (coins <= 0) {
-      setCollectionMsg("扭蛋幣不足！");
-      setTimeout(() => setCollectionMsg(null), 2000);
+      showMsg("扭蛋幣不足！");
       return;
     }
+    setShowRedeemInput(true);
+  };
+
+  const handleRedeemConfirm = () => {
+    const item = redeemText.trim();
+    if (!item) return;
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    setHonorEntries((prev) => [{ time: timeStr, text: `兌換：${item}` }, ...prev]);
     setCoins((c) => c - 1);
-    setUnlockedCount((u) => Math.min(LEGENDARY_POOL.length, u + 1));
-    setCollectionMsg("🎉 獲得新的傳說寶可夢！");
-    setTimeout(() => setCollectionMsg(null), 2500);
+    setRedeemText("");
+    setShowRedeemInput(false);
+    showMsg("🎁 兌換成功！已記錄到榮譽榜");
   };
 
   const refreshData = useCallback(async () => {
@@ -525,33 +553,64 @@ export function DryPantsApp() {
                 <div className="mt-3 space-y-2.5">
                   <button
                     type="button"
-                    onClick={handleRedeem}
+                    onClick={handleRedeemClick}
                     disabled={coins <= 0}
                     className="w-full rounded-2xl bg-violet-500 py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99] disabled:opacity-50"
                   >
                     🎁 兌換扭蛋獎品（持有 {coins} 枚）
                   </button>
+                  {showRedeemInput && (
+                    <div className="rounded-2xl border-2 border-violet-300 bg-violet-50 p-3 space-y-2">
+                      <p className="text-[11px] font-bold text-violet-700">兌換了什麼？</p>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={redeemText}
+                        onChange={(e) => setRedeemText(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleRedeemConfirm()}
+                        placeholder="例如：寶可夢卡包一包"
+                        className="w-full rounded-xl border-2 border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleRedeemConfirm}
+                          disabled={!redeemText.trim()}
+                          className="flex-1 rounded-xl bg-violet-500 py-2 text-xs font-bold text-white disabled:opacity-40"
+                        >
+                          確認兌換
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowRedeemInput(false); setRedeemText(""); }}
+                          className="flex-1 rounded-xl bg-slate-200 py-2 text-xs font-bold text-slate-600"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <button
                     type="button"
-                    onClick={() => addEnergy(2, "✅ 放學檢查 +2 能量！")}
+                    onClick={() => addLegendaries(2)}
                     className="w-full rounded-2xl bg-[#42a5f5] py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99]"
                   >
-                    🏫 放學檢查（+2格）
+                    🏫 放學檢查（+2 傳說）
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => addEnergy(1, "✅ 時段守護 +1 能量！")}
+                      onClick={() => addLegendaries(1)}
                       className="rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99]"
                     >
-                      🏠 時段守護（+1格）
+                      🏠 時段守護（+1 傳說）
                     </button>
                     <button
                       type="button"
-                      onClick={() => addEnergy(1, "✅ 去尿尿 +1 能量！")}
+                      onClick={() => addEnergy(1)}
                       className="rounded-2xl bg-orange-400 py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99]"
                     >
-                      🚽 去尿尿（+1能量）
+                      🚽 去尿尿（+1 能量）
                     </button>
                   </div>
                   <button
@@ -570,10 +629,7 @@ export function DryPantsApp() {
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            setEnergy((e) => Math.min(5, e + 1));
-                            setShowCrisis(false);
-                          }}
+                          onClick={() => { addEnergy(1); setShowCrisis(false); }}
                           className="rounded-2xl bg-slate-500 py-3 text-xs font-bold text-white shadow active:scale-[0.98]"
                         >
                           主動通報
@@ -582,10 +638,7 @@ export function DryPantsApp() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            setEnergy((e) => Math.min(5, e + 2));
-                            setShowCrisis(false);
-                          }}
+                          onClick={() => { addEnergy(2); setShowCrisis(false); }}
                           className="rounded-2xl bg-slate-600 py-3 text-xs font-bold text-white shadow active:scale-[0.98]"
                         >
                           自己清理
@@ -603,9 +656,9 @@ export function DryPantsApp() {
                   📜 兌換榮譽榜
                 </h2>
                 <ul className="divide-y divide-dashed divide-lime-800/20">
-                  {HONOR_ENTRIES.map((row) => (
+                  {honorEntries.map((row) => (
                     <li
-                      key={row.time}
+                      key={row.time + row.text}
                       className="font-honor-log py-2 text-slate-800"
                     >
                       <div>{row.time}</div>
@@ -913,9 +966,9 @@ export function DryPantsApp() {
                   📜 兌換榮譽榜
                 </h2>
                 <ul className="divide-y divide-dashed divide-lime-800/20">
-                  {HONOR_ENTRIES.map((row) => (
+                  {honorEntries.map((row) => (
                     <li
-                      key={row.time}
+                      key={row.time + row.text}
                       className="font-honor-log py-2 text-slate-800"
                     >
                       <div>{row.time}</div>
