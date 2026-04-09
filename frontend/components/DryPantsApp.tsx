@@ -131,8 +131,8 @@ const EVOLUTION_STAGES = [
   { id: 4, name: "小火龍" },
   { id: 5, name: "火恐龍" },
   { id: 6, name: "噴火龍" },
-  { id: 10034, name: "超級噴火龍 X" },
   { id: 10035, name: "超級噴火龍 Y" },
+  { id: 10034, name: "超級噴火龍 X" },
 ];
 
 const INITIAL_HONOR_ENTRIES = [
@@ -344,10 +344,10 @@ export function DryPantsApp() {
     setTimeout(() => setCollectionMsg(null), ms);
   };
 
-  // 增加能量；每滿 5 格自動兌換一隻傳說寶可夢並清零
+  // 增加能量；5 格全亮後，再加第 6 個能量才兌換傳說寶可夢並清空
   const addEnergy = (n: number) => {
     const total = energy + n;
-    if (total >= 5) {
+    if (total > 5) {
       const gained = Math.floor(total / 5);
       const remainder = total % 5;
       setEnergy(remainder);
