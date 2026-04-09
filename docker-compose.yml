@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    expose:
+      - "8000"
+    volumes:
+      # SQLite 資料持久化：容器重啟 / 重建都不會遺失紀錄
+      - db_data:/app/data
+    environment:
+      SQLALCHEMY_DATABASE_URL: sqlite:////app/data/dry_pants.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # EC2_PUBLIC_IP 定義在根目錄的 .env 檔（部署時填入）
+        NEXT_PUBLIC_API_URL: "http://${EC2_PUBLIC_IP:-localhost}"
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  db_data:
