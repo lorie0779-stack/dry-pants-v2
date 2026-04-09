@@ -6,6 +6,23 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 
+class CollectionState(Base):
+    __tablename__ = "collection_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    energy: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unlocked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class HonorEntry(Base):
+    __tablename__ = "honor_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entry_time: Mapped[str] = mapped_column(String(32), nullable=False)
+    entry_text: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
 class ErrorReason(Base):
     __tablename__ = "error_reasons"
 

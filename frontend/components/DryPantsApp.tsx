@@ -22,9 +22,14 @@ import {
   YAxis,
 } from "recharts";
 import {
+  addHonorEntry,
   createErrorRecord,
+  fetchCollectionState,
   fetchErrorReasons,
   fetchErrorRecords,
+  fetchHonorEntries,
+  resetCollectionState,
+  saveCollectionState,
   type ErrorReasonDTO,
   type ErrorRecordDTO,
 } from "@/lib/api";
@@ -135,11 +140,6 @@ const EVOLUTION_STAGES = [
   { id: 10034, name: "超級噴火龍 X" },
 ];
 
-const INITIAL_HONOR_ENTRIES = [
-  { time: "2026/3/21 15:33", text: "兌換：寶可夢卡包一包" },
-  { time: "2026/3/16 20:52", text: "兌換：品客洋芋片" },
-  { time: "2026/2/18 11:48", text: "兌換：海豹扭蛋" },
-];
 
 function startOfWeek(d: Date): Date {
   const x = new Date(d);
@@ -331,13 +331,37 @@ export function DryPantsApp() {
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState<string | null>(null);
   const [showCrisis, setShowCrisis] = useState(false);
-  const [energy, setEnergy] = useState(1);
-  const [coins, setCoins] = useState(1);
-  const [unlockedCount, setUnlockedCount] = useState(1);
+  const [energy, setEnergy] = useState(0);
+  const [coins, setCoins] = useState(0);
+  const [unlockedCount, setUnlockedCount] = useState(0);
   const [collectionMsg, setCollectionMsg] = useState<string | null>(null);
-  const [honorEntries, setHonorEntries] = useState(INITIAL_HONOR_ENTRIES);
+  const [honorEntries, setHonorEntries] = useState<{ time: string; text: string }[]>([]);
   const [showRedeemInput, setShowRedeemInput] = useState(false);
   const [redeemText, setRedeemText] = useState("");
+  const stateLoaded = useRef(false);
+
+  // 初次載入：從後端讀取收集狀態與榮譽榜
+  useEffect(() => {
+    Promise.all([fetchCollectionState(), fetchHonorEntries()])
+      .then(([state, entries]) => {
+        setEnergy(state.energy);
+        setUnlockedCount(state.unlocked_count);
+        setCoins(state.coins);
+        setHonorEntries(
+          entries.map((e) => ({ time: e.entry_time, text: e.entry_text }))
+        );
+      })
+      .catch(() => {})
+      .finally(() => {
+        stateLoaded.current = true;
+      });
+  }, []);
+
+  // 狀態變更時自動儲存到後端（跳過初次載入前的預設值）
+  useEffect(() => {
+    if (!stateLoaded.current) return;
+    saveCollectionState({ energy, unlocked_count: unlockedCount, coins }).catch(() => {});
+  }, [energy, unlockedCount, coins]);
 
   const showMsg = (msg: string, ms = 2500) => {
     setCollectionMsg(msg);
@@ -386,12 +410,14 @@ export function DryPantsApp() {
     setShowRedeemInput(true);
   };
 
-  const handleRedeemConfirm = () => {
+  const handleRedeemConfirm = async () => {
     const item = redeemText.trim();
     if (!item) return;
     const now = new Date();
     const timeStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    setHonorEntries((prev) => [{ time: timeStr, text: `兌換：${item}` }, ...prev]);
+    const entryText = `兌換：${item}`;
+    addHonorEntry({ entry_time: timeStr, entry_text: entryText }).catch(() => {});
+    setHonorEntries((prev) => [{ time: timeStr, text: entryText }, ...prev]);
     setCoins((c) => c - 1);
     setRedeemText("");
     setShowRedeemInput(false);
@@ -489,14 +515,6 @@ export function DryPantsApp() {
         <h1 className="font-pixel-title px-1 text-center text-sm leading-snug text-slate-900 sm:text-base">
           Ryder 的乾爽大冒險
         </h1>
-        <div className="mt-2 flex items-center justify-center gap-3 text-xs font-bold text-slate-800 sm:text-sm">
-          <span className="inline-flex items-center gap-1">
-            🏆 傳說寶可夢 (1/30)
-          </span>
-          <span className="rounded-full bg-violet-500 px-2.5 py-0.5 text-[10px] text-white shadow sm:text-xs">
-            🥚 x {coins}
-          </span>
-        </div>
         <div className="mx-auto mt-4 max-w-md">
           <ModePills mode={mode} onChange={setMode} variant="header" />
         </div>
@@ -581,7 +599,7 @@ export function DryPantsApp() {
                         autoFocus
                         value={redeemText}
                         onChange={(e) => setRedeemText(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleRedeemConfirm()}
+                        onKeyDown={undefined}
                         placeholder="例如：寶可夢卡包一包"
                         className="w-full rounded-xl border-2 border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
                       />
@@ -996,17 +1014,26 @@ export function DryPantsApp() {
         </div>
 
         <p className="mt-4 text-center text-[10px] font-bold text-red-600">
-          <button type="button" className="underline decoration-red-500">
+          <button
+            type="button"
+            className="underline decoration-red-500"
+            onClick={async () => {
+              if (!window.confirm("確定要重置所有進度？此操作無法還原。")) return;
+              await resetCollectionState().catch(() => {});
+              stateLoaded.current = false;
+              setEnergy(0);
+              setUnlockedCount(0);
+              setCoins(0);
+              setHonorEntries([]);
+              stateLoaded.current = true;
+              showMsg("🔄 已重置所有進度");
+            }}
+          >
             【家長專用】重置所有進度
           </button>
         </p>
       </div>
 
-      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t-4 border-[#5cbf2a] bg-[#7ae84a]/95 px-3 py-3 backdrop-blur-sm">
-        <div className="mx-auto max-w-md">
-          <ModePills mode={mode} onChange={setMode} variant="footer" />
-        </div>
-      </footer>
     </div>
   );
 }

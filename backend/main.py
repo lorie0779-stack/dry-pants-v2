@@ -4,8 +4,17 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, engine, get_db
-from models import Base, ErrorReason, ErrorRecord
-from schemas import ErrorCreate, ErrorReasonOut, ErrorRecordOut, ErrorRecordRow
+from models import Base, CollectionState, ErrorReason, ErrorRecord, HonorEntry
+from schemas import (
+    CollectionStateIn,
+    CollectionStateOut,
+    ErrorCreate,
+    ErrorReasonOut,
+    ErrorRecordOut,
+    ErrorRecordRow,
+    HonorEntryIn,
+    HonorEntryOut,
+)
 
 DEFAULT_REASON_SEEDS = [
     "廁所都有人",
@@ -42,6 +51,11 @@ def init_db() -> None:
         if existing == 0:
             for seed_text in DEFAULT_REASON_SEEDS:
                 db.add(ErrorReason(reason_text=seed_text))
+            db.commit()
+
+        # Ensure singleton CollectionState row exists
+        if db.get(CollectionState, 1) is None:
+            db.add(CollectionState(id=1, energy=0, unlocked_count=0, coins=0))
             db.commit()
     finally:
         db.close()
@@ -127,6 +141,65 @@ def list_errors(db: Session = Depends(get_db)) -> list[ErrorRecordRow]:
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
-#修正 `create_error` 回應中的 `reason_id` 錯誤。
+
+# ── Collection State ──────────────────────────────────────────────────────────
+
+@app.get("/api/collection-state", response_model=CollectionStateOut)
+def get_collection_state(db: Session = Depends(get_db)) -> CollectionStateOut:
+    row = db.get(CollectionState, 1)
+    if row is None:
+        row = CollectionState(id=1, energy=0, unlocked_count=0, coins=0)
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return CollectionStateOut.model_validate(row)
+
+
+@app.put("/api/collection-state", response_model=CollectionStateOut)
+def save_collection_state(
+    payload: CollectionStateIn, db: Session = Depends(get_db)
+) -> CollectionStateOut:
+    row = db.get(CollectionState, 1)
+    if row is None:
+        row = CollectionState(id=1)
+        db.add(row)
+    row.energy = payload.energy
+    row.unlocked_count = payload.unlocked_count
+    row.coins = payload.coins
+    db.commit()
+    db.refresh(row)
+    return CollectionStateOut.model_validate(row)
+
+
+@app.get("/api/honor-entries", response_model=list[HonorEntryOut])
+def list_honor_entries(db: Session = Depends(get_db)) -> list[HonorEntryOut]:
+    rows = (
+        db.execute(select(HonorEntry).order_by(HonorEntry.id.desc())).scalars().all()
+    )
+    return [HonorEntryOut.model_validate(r) for r in rows]
+
+
+@app.post("/api/honor-entries", response_model=HonorEntryOut)
+def create_honor_entry(
+    payload: HonorEntryIn, db: Session = Depends(get_db)
+) -> HonorEntryOut:
+    entry = HonorEntry(entry_time=payload.entry_time, entry_text=payload.entry_text)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return HonorEntryOut.model_validate(entry)
+
+
+@app.post("/api/collection-state/reset", status_code=204)
+def reset_collection_state(db: Session = Depends(get_db)) -> None:
+    db.execute(text("DELETE FROM honor_entries"))
+    row = db.get(CollectionState, 1)
+    if row is None:
+        row = CollectionState(id=1)
+        db.add(row)
+    row.energy = 0
+    row.unlocked_count = 0
+    row.coins = 0
+    db.commit()
 
 

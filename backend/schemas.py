@@ -76,3 +76,30 @@ class ErrorRecordRow(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CollectionStateOut(BaseModel):
+    energy: int
+    unlocked_count: int
+    coins: int
+
+    model_config = {"from_attributes": True}
+
+
+class CollectionStateIn(BaseModel):
+    energy: int
+    unlocked_count: int
+    coins: int
+
+
+class HonorEntryOut(BaseModel):
+    id: int
+    entry_time: str
+    entry_text: str
+
+    model_config = {"from_attributes": True}
+
+
+class HonorEntryIn(BaseModel):
+    entry_time: str
+    entry_text: str
