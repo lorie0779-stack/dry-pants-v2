@@ -59,3 +59,57 @@ npm run dev
 ## 分析模式：自訂失誤原因
 
 在「分析模式」選擇「➕ 其他（手動輸入）」並輸入文字後送出，前端會將該字串作為 `reason` 傳給 `POST /api/errors`，後端執行 **Get or Create** 寫入 `ErrorReason` 與 `ErrorRecord`。
+
+---
+
+## AWS 部署
+
+### 架構
+
+```
+瀏覽器 → http://54.237.62.8
+           │
+           ▼ port 80
+        Nginx（Docker）
+           ├── /api/*  → FastAPI backend（container port 8000）
+           └── /*      → Next.js frontend（container port 3000）
+```
+
+資料庫（SQLite）存在 Docker named volume `db_data`，容器重建後資料不會消失。
+
+### 首次部署（EC2 上）
+
+```bash
+# clone 專案
+git clone https://<TOKEN>@github.com/lorie0779-stack/dry-pants-v2.git ~/dry-pants-v2
+
+# 設定固定 IP
+echo "EC2_PUBLIC_IP=54.237.62.8" > ~/dry-pants-v2/.env
+
+# 啟動所有服務
+cd ~/dry-pants-v2
+docker compose up -d --build
+```
+
+### 日常更新（本機執行，一鍵搞定）
+
+```bash
+bash push-deploy.sh "修改說明"
+```
+
+執行流程：`git commit` → `git push` → SSH 進 EC2 → `git pull` → `docker compose up -d --build`
+
+### SSH 連線
+
+```bash
+ssh -i ~/Desktop/FamiWarRoom/famiwarroom-aws-key-2026.pem ubuntu@54.237.62.8
+```
+
+### EC2 上已共存的服務
+
+| 服務 | Port |
+|---|---|
+| dry-pants-v2（Nginx） | 80 |
+| FamiWarRoom frontend | 3001 |
+| FamiWarRoom backend（uvicorn） | 8001（內部）|
+| FamiWarRoom nginx | 8080 |
