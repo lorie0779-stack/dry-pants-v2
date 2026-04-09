@@ -9,7 +9,7 @@ APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_ROOT"
 
 echo "==> [1/4] git pull"
-git pull origin main
+git pull origin master
 
 echo "==> [2/4] build images（有快取，通常很快）"
 docker compose build

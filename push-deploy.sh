@@ -16,6 +16,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 /usr/local/Cellar/git/2.53.0_1/bin/git commit -m "$COMMIT_MSG" || echo "    （沒有新變更，略過 commit）"
 /usr/local/Cellar/git/2.53.0_1/bin/git push origin master
 
+
 echo "==> [2/3] SSH 進 EC2 執行 deploy.sh"
 ssh -i "$SSH_KEY" "$EC2_USER@$EC2_IP" "cd ~/dry-pants-v2 && bash deploy.sh"
 
