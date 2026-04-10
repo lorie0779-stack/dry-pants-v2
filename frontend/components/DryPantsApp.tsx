@@ -368,7 +368,10 @@ export function DryPantsApp() {
     useState<(typeof TIME_DIMS)[number]["key"]>("day");
   const [groupDimKey, setGroupDimKey] = useState<GroupDimKey>("type");
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
   const [incidentDate, setIncidentDate] = useState<string>(todayStr);
 
   const [submitting, setSubmitting] = useState(false);
@@ -385,6 +388,8 @@ export function DryPantsApp() {
   const [showRedeemInput, setShowRedeemInput] = useState(false);
   const [redeemText, setRedeemText] = useState("");
   const stateLoaded = useRef(false);
+  const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 初次載入：從後端讀取收集狀態與榮譽榜
   useEffect(() => {
@@ -397,42 +402,48 @@ export function DryPantsApp() {
         setHonorEntries(
           entries.map((e) => ({ time: e.entry_time, text: e.entry_text }))
         );
+        stateLoaded.current = true; // 只在成功後才允許 auto-save，避免以預設值覆寫 DB
       })
-      .catch(() => {})
-      .finally(() => {
-        stateLoaded.current = true;
-      });
+      .catch(() => {}); // 載入失敗：維持預設值但不觸發儲存
   }, []);
 
-  // 狀態變更時自動儲存到後端（跳過初次載入前的預設值）
+  // 狀態變更時自動儲存到後端（跳過初次載入前的預設值，debounce 避免連點時頻繁請求）
   useEffect(() => {
     if (!stateLoaded.current) return;
-    saveCollectionState({
-      energy,
-      unlocked_count: unlockedCount,
-      coins,
-      slot_order: slotOrder,
-    }).catch(() => {});
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveCollectionState({
+        energy,
+        unlocked_count: unlockedCount,
+        coins,
+        slot_order: slotOrder,
+      }).catch(() => {});
+    }, 600);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
   }, [energy, unlockedCount, coins, slotOrder]);
 
   const showMsg = (msg: string, ms = 2500) => {
+    if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
     setCollectionMsg(msg);
-    setTimeout(() => setCollectionMsg(null), ms);
+    msgTimerRef.current = setTimeout(() => setCollectionMsg(null), ms);
   };
 
   // 統一處理傳說寶可夢增加；集滿 ROUND_SIZE 後清空並兌換扭蛋幣，同時產生新隨機排列
   const gainLegendaries = (n: number, gainMsg?: string) => {
-    const newTotal = unlockedCount + n;
+    const safeN = Math.max(0, Math.round(n));
+    const newTotal = unlockedCount + safeN;
     if (newTotal > ROUND_SIZE) {
       const coinsGained = Math.floor(newTotal / ROUND_SIZE);
       const remainder = newTotal % ROUND_SIZE;
       setUnlockedCount(remainder);
       setSlotOrder(makeSlotOrder()); // 新一輪：從 50 隻裡重新隨機抽 30 隻
       setCoins((c) => c + coinsGained);
-      showMsg(`🌈 集齊傳說！清空兌換 ${coinsGained} 顆扭蛋！`, 3500);
+      showMsg(gainMsg ?? `🌈 集齊傳說！清空兌換 ${coinsGained} 顆扭蛋！`, 3500);
     } else {
       setUnlockedCount(newTotal);
-      showMsg(gainMsg ?? `🌟 解鎖了 ${n} 隻傳說寶可夢！`);
+      showMsg(gainMsg ?? `🌟 解鎖了 ${safeN} 隻傳說寶可夢！`);
     }
   };
 
@@ -469,7 +480,12 @@ export function DryPantsApp() {
     const now = new Date();
     const timeStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const entryText = `兌換：${item}`;
-    addHonorEntry({ entry_time: timeStr, entry_text: entryText }).catch(() => {});
+    try {
+      await addHonorEntry({ entry_time: timeStr, entry_text: entryText });
+    } catch {
+      showMsg("❌ 兌換失敗，請稍後再試");
+      return; // API 失敗：不扣幣、不更新榮譽榜
+    }
     setHonorEntries((prev) => [{ time: timeStr, text: entryText }, ...prev]);
     setCoins((c) => c - 1);
     setRedeemText("");
@@ -652,7 +668,6 @@ export function DryPantsApp() {
                         autoFocus
                         value={redeemText}
                         onChange={(e) => setRedeemText(e.target.value)}
-                        onKeyDown={undefined}
                         placeholder="例如：寶可夢卡包一包"
                         className="w-full rounded-xl border-2 border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
                       />
@@ -741,9 +756,9 @@ export function DryPantsApp() {
                   📜 兌換榮譽榜
                 </h2>
                 <ul className="divide-y divide-dashed divide-lime-800/20">
-                  {honorEntries.map((row) => (
+                  {honorEntries.map((row, i) => (
                     <li
-                      key={row.time + row.text}
+                      key={i}
                       className="font-honor-log py-2 text-slate-800"
                     >
                       <div>{row.time}</div>
@@ -1051,9 +1066,9 @@ export function DryPantsApp() {
                   📜 兌換榮譽榜
                 </h2>
                 <ul className="divide-y divide-dashed divide-lime-800/20">
-                  {honorEntries.map((row) => (
+                  {honorEntries.map((row, i) => (
                     <li
-                      key={row.time + row.text}
+                      key={i}
                       className="font-honor-log py-2 text-slate-800"
                     >
                       <div>{row.time}</div>
