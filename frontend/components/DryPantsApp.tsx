@@ -100,22 +100,22 @@ const POKEBALL_IMG =
 const LUCKY_EGG_IMG =
   "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/lucky-egg.png";
 
-// 完整傳說池（50 隻）；每輪從中隨機取 ROUND_SIZE 隻
+// 完整傳說池（94 隻：71 is_legendary + 23 is_mythical，Gen 1–9 全收）；每輪從中隨機取 ROUND_SIZE 隻
 const LEGENDARY_POOL = [
-  // Gen 1
+  // Gen 1 — 4 legendary + 1 mythical
   { id: 144, name: "急凍鳥" },
   { id: 145, name: "閃電鳥" },
   { id: 146, name: "火焰鳥" },
   { id: 150, name: "超夢" },
   { id: 151, name: "夢幻" },
-  // Gen 2
+  // Gen 2 — 5 legendary + 1 mythical
   { id: 243, name: "雷公" },
   { id: 244, name: "炎帝" },
   { id: 245, name: "水君" },
   { id: 249, name: "洛奇亞" },
   { id: 250, name: "鳳王" },
   { id: 251, name: "時拉比" },
-  // Gen 3
+  // Gen 3 — 8 legendary + 2 mythical
   { id: 377, name: "雷吉洛克" },
   { id: 378, name: "雷吉艾斯" },
   { id: 379, name: "雷吉斯奇魯" },
@@ -126,15 +126,28 @@ const LEGENDARY_POOL = [
   { id: 384, name: "烈空坐" },
   { id: 385, name: "基拉祈" },
   { id: 386, name: "代歐奇希斯" },
-  // Gen 4
+  // Gen 4 — 10 legendary + 4 mythical
+  { id: 480, name: "由克希" },
+  { id: 481, name: "艾姆利多" },
+  { id: 482, name: "阿姆路歐" },
   { id: 483, name: "帝牙盧卡" },
   { id: 484, name: "帕路奇亞" },
+  { id: 485, name: "席多藍恩" },
+  { id: 486, name: "雷吉奇卡斯" },
   { id: 487, name: "騎拉帝納" },
+  { id: 488, name: "克蕾色利亞" },
+  { id: 489, name: "菲歐尼" },
+  { id: 490, name: "瑪納霏" },
   { id: 491, name: "達克萊伊" },
   { id: 492, name: "謝米" },
   { id: 493, name: "阿爾宙斯" },
+  // Gen 5 — 9 legendary + 4 mythical
   { id: 494, name: "比克提尼" },
-  // Gen 5
+  { id: 638, name: "科巴魯翁" },
+  { id: 639, name: "帖拉奇翁" },
+  { id: 640, name: "彼理基翁" },
+  { id: 641, name: "龍捲雲" },
+  { id: 642, name: "雷電雲" },
   { id: 643, name: "萊希拉姆" },
   { id: 644, name: "捷克羅姆" },
   { id: 645, name: "土地雲" },
@@ -142,24 +155,56 @@ const LEGENDARY_POOL = [
   { id: 647, name: "凱路迪歐" },
   { id: 648, name: "美露頓" },
   { id: 649, name: "蓋諾賽克特" },
-  // Gen 6
+  // Gen 6 — 3 legendary + 3 mythical
   { id: 716, name: "哲爾尼亞斯" },
   { id: 717, name: "伊裂卡戎" },
   { id: 718, name: "基格爾德" },
   { id: 719, name: "迪安希" },
   { id: 720, name: "胡帕" },
   { id: 721, name: "薩戮達" },
-  // Gen 7
+  // Gen 7 — 11 legendary + 5 mythical
+  { id: 772, name: "屬性：空" },
+  { id: 773, name: "銀伴戰友" },
+  { id: 785, name: "卡璞・鳴鳴" },
+  { id: 786, name: "卡璞・蝶蝶" },
+  { id: 787, name: "卡璞・哞哞" },
+  { id: 788, name: "卡璞・雷雷" },
+  { id: 789, name: "星雲幻人" },
+  { id: 790, name: "星雲神童" },
   { id: 791, name: "索爾迦雷歐" },
   { id: 792, name: "露奈雅拉" },
   { id: 800, name: "奈克洛茲馬" },
-  { id: 801, name: "瑪夏多" },
-  { id: 802, name: "馬席夫" },
+  { id: 801, name: "瑪機雅娜" },
+  { id: 802, name: "瑪夏多" },
   { id: 807, name: "澤拉歐拉" },
-  // Gen 8
+  { id: 808, name: "美錄坦" },
+  { id: 809, name: "美錄梅塔" },
+  // Gen 8 — 11 legendary + 1 mythical
   { id: 888, name: "蒼響" },
   { id: 889, name: "藏瑪然特" },
   { id: 890, name: "無極汰那" },
+  { id: 891, name: "熊徒弟" },
+  { id: 892, name: "拳王熊" },
+  { id: 893, name: "薩路德" },
+  { id: 894, name: "雷吉電彼" },
+  { id: 895, name: "雷吉龍" },
+  { id: 896, name: "冰麟馬" },
+  { id: 897, name: "幽靈馬" },
+  { id: 898, name: "雪色霸主" },
+  { id: 905, name: "精靈雲" },
+  // Gen 9 — 11 legendary + 1 mythical
+  { id: 1001, name: "綑綁之絨" },
+  { id: 1002, name: "寒冰之劍" },
+  { id: 1003, name: "古丘之鐘" },
+  { id: 1004, name: "赤焰之珠" },
+  { id: 1005, name: "故勒頓" },
+  { id: 1006, name: "密勒頓" },
+  { id: 1014, name: "鬥犬奇奇" },
+  { id: 1015, name: "猴奇奇" },
+  { id: 1016, name: "雉鳥奇奇" },
+  { id: 1017, name: "奧蓋朋" },
+  { id: 1024, name: "達帕戈斯" },
+  { id: 1025, name: "皮查路特" },
 ];
 
 /** 每輪從完整池隨機抽取的數量 */
@@ -438,7 +483,7 @@ export function DryPantsApp() {
       const coinsGained = Math.floor(newTotal / ROUND_SIZE);
       const remainder = newTotal % ROUND_SIZE;
       setUnlockedCount(remainder);
-      setSlotOrder(makeSlotOrder()); // 新一輪：從 50 隻裡重新隨機抽 30 隻
+      setSlotOrder(makeSlotOrder()); // 新一輪：從 94 隻裡重新隨機抽 30 隻
       setCoins((c) => c + coinsGained);
       showMsg(gainMsg ?? `🌈 集齊傳說！清空兌換 ${coinsGained} 顆扭蛋！`, 3500);
     } else {

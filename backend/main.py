@@ -19,7 +19,7 @@ from schemas import (
     HonorEntryOut,
 )
 
-FULL_POOL_SIZE = 50   # 完整傳說池大小
+FULL_POOL_SIZE = 94   # 完整傳說池大小（71 is_legendary + 23 is_mythical，Gen 1–9）
 ROUND_SIZE = 30       # 每輪隨機取的數量
 
 
