@@ -25,7 +25,6 @@ import {
 } from "recharts";
 import {
   addHonorEntry,
-  claimPatrolEncounter,
   createErrorRecord,
   fetchCollectionState,
   fetchCourageTotal,
