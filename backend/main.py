@@ -78,6 +78,14 @@ def init_db() -> None:
         except Exception:
             pass  # column already exists
 
+    # Migration: add courage_bands column to collection_state
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE collection_state ADD COLUMN courage_bands INTEGER DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
     db = SessionLocal()
     try:
         existing = db.execute(select(func.count()).select_from(ErrorReason)).scalar_one()
@@ -183,6 +191,7 @@ def _state_to_out(row: CollectionState) -> CollectionStateOut:
         unlocked_count=row.unlocked_count,
         coins=row.coins,
         slot_order=json.loads(row.slot_order) if row.slot_order else list(range(ROUND_SIZE)),
+        courage_bands=row.courage_bands if row.courage_bands is not None else 0,
     )
 
 
@@ -335,6 +344,25 @@ def get_courage_total(db: Session = Depends(get_db)) -> CourageTotalOut:
     return CourageTotalOut(total_courage=total)
 
 
+@app.post("/api/patrol-log/courage-redeem", response_model=CollectionStateOut)
+def redeem_courage_band(db: Session = Depends(get_db)) -> CollectionStateOut:
+    total = db.execute(select(func.sum(PatrolLog.courage_stamps))).scalar_one() or 0
+    row = db.get(CollectionState, 1)
+    if row is None:
+        row = CollectionState(id=1, energy=0, unlocked_count=0, coins=0, courage_bands=0, slot_order=_make_slot_order())
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    bands_earned = total // 5
+    current_bands = row.courage_bands if row.courage_bands is not None else 0
+    if bands_earned <= current_bands:
+        raise HTTPException(status_code=422, detail="勇氣印章不足，無法兌換極巨腕帶")
+    row.courage_bands = current_bands + 1
+    db.commit()
+    db.refresh(row)
+    return _state_to_out(row)
+
+
 @app.post("/api/collection-state/reset", status_code=204)
 def reset_collection_state(db: Session = Depends(get_db)) -> None:
     db.execute(text("DELETE FROM honor_entries"))
@@ -345,6 +373,7 @@ def reset_collection_state(db: Session = Depends(get_db)) -> None:
     row.energy = 0
     row.unlocked_count = 0
     row.coins = 0
+    row.courage_bands = 0
     row.slot_order = _make_slot_order()  # 重置時產生新隨機排列
     db.commit()
 

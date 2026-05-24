@@ -32,6 +32,7 @@ import {
   fetchErrorRecords,
   fetchHonorEntries,
   fetchTodayPatrolLog,
+  redeemCourageBand,
   resetCollectionState,
   saveCollectionState,
   submitPatrolLog,
@@ -459,6 +460,8 @@ export function DryPantsApp() {
   const [patrolError, setPatrolError] = useState<string | null>(null);
   const [todayLog, setTodayLog] = useState<PatrolLogDTO | null>(null);
   const [courageTotal, setCourageTotal] = useState(0);
+  const [courageBands, setCourageBands] = useState(0);
+  const [redeemingBand, setRedeemingBand] = useState(false);
 
   const stateLoaded = useRef(false);
   const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -472,6 +475,7 @@ export function DryPantsApp() {
         setUnlockedCount(state.unlocked_count);
         setCoins(state.coins);
         setSlotOrder(state.slot_order);
+        setCourageBands(state.courage_bands ?? 0);
         setHonorEntries(
           entries.map((e) => ({ time: e.entry_time, text: e.entry_text }))
         );
@@ -810,18 +814,54 @@ export function DryPantsApp() {
                 </div>
 
                 {/* 勇氣印章進度條 */}
-                <div className="mt-4">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">💛 勇氣印章</span>
-                    <span className="text-xs text-slate-500">{Math.min(courageTotal, 5)} / 5 → 極巨腕帶</span>
-                  </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-                    <div
-                      className="h-full rounded-full bg-yellow-400 transition-all duration-500"
-                      style={{ width: `${Math.min(courageTotal / 5, 1) * 100}%` }}
-                    />
-                  </div>
-                </div>
+                {(() => {
+                  const bandsEarned = Math.floor(courageTotal / 5);
+                  const redeemable = bandsEarned - courageBands;
+                  const progressStamps = redeemable > 0 ? 5 : courageTotal % 5;
+                  return (
+                    <div className="mt-4">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700">💛 勇氣印章</span>
+                        <span className="text-xs text-slate-500">{progressStamps} / 5 → 極巨腕帶</span>
+                      </div>
+                      <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-yellow-400 transition-all duration-500"
+                          style={{ width: `${(progressStamps / 5) * 100}%` }}
+                        />
+                      </div>
+                      {redeemable > 0 && (
+                        <button
+                          type="button"
+                          disabled={redeemingBand}
+                          onClick={async () => {
+                            if (redeemingBand) return;
+                            setRedeemingBand(true);
+                            try {
+                              const updated = await redeemCourageBand();
+                              setCourageBands(updated.courage_bands ?? 0);
+                              const now = new Date();
+                              const timeStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                              const entryText = "兌換：極巨腕帶 ⚡";
+                              try {
+                                await addHonorEntry({ entry_time: timeStr, entry_text: entryText });
+                                setHonorEntries((prev) => [{ time: timeStr, text: entryText }, ...prev]);
+                              } catch { /* 榮譽榜失敗不影響主流程 */ }
+                              showMsg("⚡ 獲得極巨腕帶！Ryder 超勇敢！", 4000);
+                            } catch {
+                              showMsg("❌ 兌換失敗，請稍後再試");
+                            } finally {
+                              setRedeemingBand(false);
+                            }
+                          }}
+                          className="mt-2 w-full rounded-2xl bg-yellow-400 hover:bg-yellow-500 py-3 text-sm font-bold text-slate-900 shadow-md transition active:scale-[0.99] disabled:opacity-60"
+                        >
+                          {redeemingBand ? "兌換中…" : "⚡ 兌換極巨腕帶！"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="mt-3 space-y-2.5">
                   {/* 巡邏按鈕：4 種狀態 */}

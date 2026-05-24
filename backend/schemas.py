@@ -84,6 +84,7 @@ class CollectionStateOut(BaseModel):
     unlocked_count: int
     coins: int
     slot_order: list[int]
+    courage_bands: int = 0
 
     model_config = {"from_attributes": True}
 

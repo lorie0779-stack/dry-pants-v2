@@ -72,6 +72,7 @@ export type CollectionStateDTO = {
   unlocked_count: number;
   coins: number;
   slot_order: number[];
+  courage_bands?: number;
 };
 
 export type HonorEntryDTO = {
@@ -157,6 +158,17 @@ export async function submitPatrolLog(payload: {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `送出失敗：${res.status}`);
+  }
+  return res.json();
+}
+
+export async function redeemCourageBand(): Promise<CollectionStateDTO> {
+  const res = await fetch(`${getApiBase()}/api/patrol-log/courage-redeem`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `兌換失敗：${res.status}`);
   }
   return res.json();
 }

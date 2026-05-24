@@ -14,6 +14,7 @@ class CollectionState(Base):
     unlocked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     slot_order: Mapped[str | None] = mapped_column(String(256), nullable=True, default=None)
+    courage_bands: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class PatrolLog(Base):
