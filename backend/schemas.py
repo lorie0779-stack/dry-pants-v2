@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -92,6 +93,36 @@ class CollectionStateIn(BaseModel):
     unlocked_count: int
     coins: int
     slot_order: list[int]
+
+
+BlockResult = Literal["clean", "accident_told", "accident_silent"]
+
+
+class PatrolLogIn(BaseModel):
+    log_date: date
+    block_1: BlockResult
+    block_2: BlockResult
+    block_3: BlockResult
+
+
+class PatrolLogOut(BaseModel):
+    id: int
+    log_date: date
+    block_1: str
+    block_2: str
+    block_3: str
+    regular_stamps: int
+    courage_stamps: int
+    encounter_tier: str | None
+    pokemon_index: int | None
+    claimed: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CourageTotalOut(BaseModel):
+    total_courage: int
 
 
 class HonorEntryOut(BaseModel):

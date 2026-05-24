@@ -124,3 +124,67 @@ export async function resetCollectionState(): Promise<void> {
     method: "POST",
   });
 }
+
+// ── Patrol Log ────────────────────────────────────────────────────────────────
+
+export type BlockResult = "clean" | "accident_told" | "accident_silent";
+
+export type PatrolLogDTO = {
+  id: number;
+  log_date: string;
+  block_1: BlockResult;
+  block_2: BlockResult;
+  block_3: BlockResult;
+  regular_stamps: number;
+  courage_stamps: number;
+  encounter_tier: string | null;
+  pokemon_index: number | null;
+  claimed: boolean;
+  created_at: string;
+};
+
+export async function submitPatrolLog(payload: {
+  log_date: string;
+  block_1: BlockResult;
+  block_2: BlockResult;
+  block_3: BlockResult;
+}): Promise<PatrolLogDTO> {
+  const res = await fetch(`${getApiBase()}/api/patrol-log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `送出失敗：${res.status}`);
+  }
+  return res.json();
+}
+
+export async function claimPatrolEncounter(): Promise<CollectionStateDTO> {
+  const res = await fetch(`${getApiBase()}/api/patrol-log/claim`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `領取失敗：${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchTodayPatrolLog(): Promise<PatrolLogDTO | null> {
+  const res = await fetch(`${getApiBase()}/api/patrol-log/today`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`載入今日巡邏失敗：${res.status}`);
+  return res.json();
+}
+
+export async function fetchCourageTotal(): Promise<number> {
+  const res = await fetch(`${getApiBase()}/api/patrol-log/courage-total`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`載入勇氣印章失敗：${res.status}`);
+  const data = (await res.json()) as { total_courage: number };
+  return data.total_courage;
+}

@@ -3,20 +3,25 @@ import random
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import date as date_type
+
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, engine, get_db
-from models import Base, CollectionState, ErrorReason, ErrorRecord, HonorEntry
+from models import Base, CollectionState, ErrorReason, ErrorRecord, HonorEntry, PatrolLog
 from schemas import (
     CollectionStateIn,
     CollectionStateOut,
+    CourageTotalOut,
     ErrorCreate,
     ErrorReasonOut,
     ErrorRecordOut,
     ErrorRecordRow,
     HonorEntryIn,
     HonorEntryOut,
+    PatrolLogIn,
+    PatrolLogOut,
 )
 
 FULL_POOL_SIZE = 94   # 完整傳說池大小（71 is_legendary + 23 is_mythical，Gen 1–9）
@@ -61,6 +66,14 @@ def init_db() -> None:
     with engine.connect() as conn:
         try:
             conn.execute(text("ALTER TABLE collection_state ADD COLUMN slot_order VARCHAR(256)"))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
+    # Migration: add claimed column to patrol_logs
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE patrol_logs ADD COLUMN claimed INTEGER DEFAULT 0"))
             conn.commit()
         except Exception:
             pass  # column already exists
@@ -222,6 +235,104 @@ def create_honor_entry(
     db.commit()
     db.refresh(entry)
     return HonorEntryOut.model_validate(entry)
+
+
+# ── Patrol Log ───────────────────────────────────────────────────────────────
+
+VALID_BLOCKS = {"clean", "accident_told", "accident_silent"}
+
+
+def _compute_tier(blocks: list[str]) -> tuple[str, int, int]:
+    regular = sum(1 for b in blocks if b == "clean")
+    courage = sum(1 for b in blocks if b == "accident_told")
+    if regular == 3:
+        tier = "legendary" if random.random() < 0.7 else "normal"
+    elif regular == 2:
+        tier = "normal"
+    elif regular == 1:
+        tier = "luck"
+    elif courage > 0:
+        tier = "courage"
+    else:
+        tier = "none"
+    return tier, regular, courage
+
+
+@app.post("/api/patrol-log", response_model=PatrolLogOut)
+def create_patrol_log(
+    payload: PatrolLogIn, db: Session = Depends(get_db)
+) -> PatrolLogOut:
+    existing = db.execute(
+        select(PatrolLog).where(PatrolLog.log_date == payload.log_date)
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="今日巡邏已記錄")
+
+    blocks = [payload.block_1, payload.block_2, payload.block_3]
+    tier, regular, courage = _compute_tier(blocks)
+    pokemon_idx = random.randint(0, FULL_POOL_SIZE - 1) if tier != "none" else None
+
+    log = PatrolLog(
+        log_date=payload.log_date,
+        block_1=payload.block_1,
+        block_2=payload.block_2,
+        block_3=payload.block_3,
+        regular_stamps=regular,
+        courage_stamps=courage,
+        encounter_tier=tier,
+        pokemon_index=pokemon_idx,
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return PatrolLogOut.model_validate(log)
+
+
+@app.get("/api/patrol-log/today", response_model=PatrolLogOut | None)
+def get_today_patrol_log(db: Session = Depends(get_db)) -> PatrolLogOut | None:
+    today = date_type.today()
+    row = db.execute(
+        select(PatrolLog).where(PatrolLog.log_date == today)
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    return PatrolLogOut.model_validate(row)
+
+
+@app.post("/api/patrol-log/claim", response_model=CollectionStateOut)
+def claim_patrol_encounter(db: Session = Depends(get_db)) -> CollectionStateOut:
+    today = date_type.today()
+    log = db.execute(
+        select(PatrolLog).where(PatrolLog.log_date == today)
+    ).scalar_one_or_none()
+    if log is None:
+        raise HTTPException(status_code=404, detail="今日尚無巡邏記錄")
+    if log.encounter_tier == "none" or log.pokemon_index is None:
+        raise HTTPException(status_code=422, detail="今日遭遇等級為 none，無法領取")
+    if log.claimed:
+        raise HTTPException(status_code=409, detail="今日遭遇戰已領取")
+
+    log.claimed = True
+    row = db.get(CollectionState, 1)
+    if row is None:
+        row = CollectionState(id=1, energy=0, unlocked_count=0, coins=0)
+        db.add(row)
+    row.unlocked_count += 1
+    if row.unlocked_count >= ROUND_SIZE:
+        coins_gained = row.unlocked_count // ROUND_SIZE
+        row.unlocked_count = row.unlocked_count % ROUND_SIZE
+        row.coins += coins_gained
+        row.slot_order = _make_slot_order()
+
+    db.commit()
+    db.refresh(row)
+    return _state_to_out(row)
+
+
+@app.get("/api/patrol-log/courage-total", response_model=CourageTotalOut)
+def get_courage_total(db: Session = Depends(get_db)) -> CourageTotalOut:
+    total = db.execute(select(func.sum(PatrolLog.courage_stamps))).scalar_one() or 0
+    return CourageTotalOut(total_courage=total)
 
 
 @app.post("/api/collection-state/reset", status_code=204)

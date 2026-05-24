@@ -2,6 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  20% { transform: translateX(-10px) rotate(-3deg); }
+  40% { transform: translateX(10px) rotate(3deg); }
+  60% { transform: translateX(-8px) rotate(-2deg); }
+  80% { transform: translateX(8px) rotate(2deg); }
+}
+
+@keyframes pokeballRock {
+  0%        { transform: rotate(0deg); }
+  10%       { transform: rotate(30deg); }
+  25%       { transform: rotate(-30deg); }
+  40%       { transform: rotate(20deg); }
+  55%       { transform: rotate(-20deg); }
+  70%       { transform: rotate(10deg); }
+  85%       { transform: rotate(-5deg); }
+  100%      { transform: rotate(0deg); }
+}
+
+@keyframes pokeballOpen {
+  0%   { transform: scale(1); opacity: 1; }
+  40%  { transform: scale(1.6); opacity: 0.6; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+@keyframes revealPop {
+  0%   { transform: scale(0.7); opacity: 0; }
+  60%  { transform: scale(1.18); opacity: 1; }
+  80%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+  50%       { opacity: 1; transform: scale(1) rotate(180deg); }
+}
+
+@keyframes floatY {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; }
+  50%       { opacity: 0.9; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
 :root {
   --background: #7ae84a;
   --foreground: #1a1f24;

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bar,
   BarChart,
@@ -24,15 +25,21 @@ import {
 } from "recharts";
 import {
   addHonorEntry,
+  claimPatrolEncounter,
   createErrorRecord,
   fetchCollectionState,
+  fetchCourageTotal,
   fetchErrorReasons,
   fetchErrorRecords,
   fetchHonorEntries,
+  fetchTodayPatrolLog,
   resetCollectionState,
   saveCollectionState,
+  submitPatrolLog,
+  type BlockResult,
   type ErrorReasonDTO,
   type ErrorRecordDTO,
+  type PatrolLogDTO,
 } from "@/lib/api";
 
 type Mode = "collection" | "analysis";
@@ -395,7 +402,22 @@ function PokeTile({
   );
 }
 
+type PatrolBlockState = BlockResult | null;
+
+const BLOCK_LABELS: Record<BlockResult, string> = {
+  clean: "🛡️ 乾燥",
+  accident_told: "💧 有說",
+  accident_silent: "🤫 沒說",
+};
+
+const BLOCK_COLORS: Record<BlockResult, string> = {
+  clean: "bg-emerald-500 text-white ring-2 ring-emerald-300",
+  accident_told: "bg-blue-500 text-white ring-2 ring-blue-300",
+  accident_silent: "bg-slate-400 text-white ring-2 ring-slate-300",
+};
+
 export function DryPantsApp() {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("collection");
   const [reasons, setReasons] = useState<ErrorReasonDTO[]>([]);
   const [records, setRecords] = useState<ErrorRecordDTO[]>([]);
@@ -432,14 +454,21 @@ export function DryPantsApp() {
   const [honorEntries, setHonorEntries] = useState<{ time: string; text: string }[]>([]);
   const [showRedeemInput, setShowRedeemInput] = useState(false);
   const [redeemText, setRedeemText] = useState("");
+  const [showPatrol, setShowPatrol] = useState(false);
+  const [patrolBlocks, setPatrolBlocks] = useState<[PatrolBlockState, PatrolBlockState, PatrolBlockState]>([null, null, null]);
+  const [patrolSubmitting, setPatrolSubmitting] = useState(false);
+  const [patrolError, setPatrolError] = useState<string | null>(null);
+  const [todayLog, setTodayLog] = useState<PatrolLogDTO | null>(null);
+  const [courageTotal, setCourageTotal] = useState(0);
+
   const stateLoaded = useRef(false);
   const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 初次載入：從後端讀取收集狀態與榮譽榜
+  // 初次載入：從後端讀取收集狀態、榮譽榜、今日巡邏、勇氣總計
   useEffect(() => {
-    Promise.all([fetchCollectionState(), fetchHonorEntries()])
-      .then(([state, entries]) => {
+    Promise.all([fetchCollectionState(), fetchHonorEntries(), fetchTodayPatrolLog(), fetchCourageTotal()])
+      .then(([state, entries, log, courage]) => {
         setEnergy(state.energy);
         setUnlockedCount(state.unlocked_count);
         setCoins(state.coins);
@@ -447,6 +476,8 @@ export function DryPantsApp() {
         setHonorEntries(
           entries.map((e) => ({ time: e.entry_time, text: e.entry_text }))
         );
+        setTodayLog(log);
+        setCourageTotal(courage);
         stateLoaded.current = true; // 只在成功後才允許 auto-save，避免以預設值覆寫 DB
       })
       .catch(() => {}); // 載入失敗：維持預設值但不觸發儲存
@@ -538,6 +569,37 @@ export function DryPantsApp() {
     showMsg("🎁 兌換成功！已記錄到榮譽榜");
   };
 
+  const handlePatrolSubmit = async () => {
+    if (patrolBlocks.some((b) => b === null)) return;
+    setPatrolSubmitting(true);
+    setPatrolError(null);
+    const today = new Date();
+    const log_date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    try {
+      const result = await submitPatrolLog({
+        log_date,
+        block_1: patrolBlocks[0]!,
+        block_2: patrolBlocks[1]!,
+        block_3: patrolBlocks[2]!,
+      });
+      setShowPatrol(false);
+      setPatrolBlocks([null, null, null]);
+      setTodayLog(result);
+      if (result.encounter_tier && result.encounter_tier !== "none" && result.pokemon_index !== null) {
+        const poke = LEGENDARY_POOL[result.pokemon_index];
+        if (poke) {
+          router.push(`/encounter?tier=${result.encounter_tier}&pokemonId=${poke.id}&pokemonName=${encodeURIComponent(poke.name)}`);
+          return;
+        }
+      }
+      showMsg("📋 巡邏紀錄完成！今天沒有對戰機會，明天繼續加油！", 3500);
+    } catch (e) {
+      setPatrolError(e instanceof Error ? e.message : "送出失敗");
+    } finally {
+      setPatrolSubmitting(false);
+    }
+  };
+
   const refreshData = useCallback(async () => {
     setLoadError(null);
     try {
@@ -625,6 +687,58 @@ export function DryPantsApp() {
           </div>
         </div>
       )}
+
+      {showPatrol && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) setShowPatrol(false); }}>
+          <div className="w-full max-w-md rounded-t-3xl bg-white p-5 pb-8 shadow-2xl animate-drypants-fade-in">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-black text-slate-800">🌙 今天的巡邏報告</h2>
+              <button type="button" onClick={() => setShowPatrol(false)} className="text-slate-400 text-xl leading-none">✕</button>
+            </div>
+
+            {(["早上", "下午", "晚上"] as const).map((label, i) => (
+              <div key={i} className="mb-4">
+                <p className="mb-2 text-xs font-bold text-slate-500">{label}</p>
+                <div className="flex gap-2">
+                  {(["clean", "accident_told", "accident_silent"] as BlockResult[]).map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setPatrolBlocks((prev) => { const next = [...prev] as typeof prev; next[i] = val; return next; })}
+                      className={`flex-1 rounded-2xl py-3 text-xs font-bold transition active:scale-95 ${
+                        patrolBlocks[i] === val
+                          ? BLOCK_COLORS[val]
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {BLOCK_LABELS[val]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {patrolError && (
+              <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{patrolError}</p>
+            )}
+
+            <div className="mb-3 rounded-2xl bg-slate-50 p-3 text-[11px] text-slate-500 leading-relaxed">
+              <span className="font-bold">🛡️ 乾燥</span> = 乾爽過關 ·{" "}
+              <span className="font-bold">💧 有說</span> = 尿濕了但主動說 ·{" "}
+              <span className="font-bold">🤫 沒說</span> = 尿濕沒告訴人
+            </div>
+
+            <button
+              type="button"
+              onClick={handlePatrolSubmit}
+              disabled={patrolBlocks.some((b) => b === null) || patrolSubmitting}
+              className="w-full rounded-2xl bg-indigo-600 py-4 text-sm font-bold text-white shadow-md transition active:scale-[0.99] disabled:opacity-40"
+            >
+              {patrolSubmitting ? "送出中…" : "✨ 送出巡邏，開啟對戰！"}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="bg-gradient-to-b from-sky-300 via-sky-200/80 to-[#7ae84a] px-3 pb-3 pt-5">
         <h1 className="font-pixel-title px-1 text-center text-sm leading-snug text-slate-900 sm:text-base">
           Ryder 的乾爽大冒險
@@ -696,7 +810,53 @@ export function DryPantsApp() {
                   </div>
                 </div>
 
+                {/* 勇氣印章進度條 */}
+                <div className="mt-4">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">💛 勇氣印章</span>
+                    <span className="text-xs text-slate-500">{Math.min(courageTotal, 5)} / 5 → 極巨腕帶</span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-yellow-400 transition-all duration-500"
+                      style={{ width: `${Math.min(courageTotal / 5, 1) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
                 <div className="mt-3 space-y-2.5">
+                  {/* 巡邏按鈕：4 種狀態 */}
+                  {!todayLog ? (
+                    <button
+                      type="button"
+                      onClick={() => { setShowPatrol(true); setPatrolBlocks([null, null, null]); setPatrolError(null); }}
+                      className="w-full rounded-2xl bg-indigo-600 py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99]"
+                    >
+                      🌙 晚間巡邏報告
+                    </button>
+                  ) : todayLog.encounter_tier === "none" ? (
+                    <div className="w-full rounded-2xl bg-slate-200 py-3.5 text-center text-sm font-bold text-slate-500">
+                      📋 今日巡邏完成
+                      <div className="text-xs font-normal text-slate-400 mt-0.5">明天再來！</div>
+                    </div>
+                  ) : !todayLog.claimed ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const poke = LEGENDARY_POOL[todayLog.pokemon_index!];
+                        if (poke) {
+                          router.push(`/encounter?tier=${todayLog.encounter_tier}&pokemonId=${poke.id}&pokemonName=${encodeURIComponent(poke.name)}`);
+                        }
+                      }}
+                      className="w-full rounded-2xl bg-yellow-500 hover:bg-yellow-600 py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99]"
+                    >
+                      ✨ 前往揭曉！
+                    </button>
+                  ) : (
+                    <div className="w-full rounded-2xl bg-green-500 py-3.5 text-center text-sm font-bold text-white shadow-md">
+                      ✓ 今日已捕獲
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={handleRedeemClick}

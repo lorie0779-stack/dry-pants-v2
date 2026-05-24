@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -14,6 +14,24 @@ class CollectionState(Base):
     unlocked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     slot_order: Mapped[str | None] = mapped_column(String(256), nullable=True, default=None)
+
+
+class PatrolLog(Base):
+    __tablename__ = "patrol_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    log_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
+    block_1: Mapped[str] = mapped_column(String(16), nullable=False)
+    block_2: Mapped[str] = mapped_column(String(16), nullable=False)
+    block_3: Mapped[str] = mapped_column(String(16), nullable=False)
+    regular_stamps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    courage_stamps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    encounter_tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    pokemon_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    claimed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class HonorEntry(Base):
