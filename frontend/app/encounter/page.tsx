@@ -182,6 +182,7 @@ function EncounterScreen() {
         {/* 寶可球（搖晃 + 開啟階段） */}
         {!isRevealed && (
           <CSSPokeball
+            key={phase === 'shaking' ? rockCount : phase}
             size={240}
             style={{
               animation:

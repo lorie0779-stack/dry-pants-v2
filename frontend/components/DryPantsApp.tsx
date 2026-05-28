@@ -376,16 +376,16 @@ function PokeTile({
 
   if (unlocked) {
     return (
-      <div
-        className="group relative flex aspect-square items-center justify-center rounded-lg border-2 border-amber-400 bg-gradient-to-br from-amber-100 to-amber-300 shadow-md"
-        title={legend.name}
-      >
+      <div className="group relative flex aspect-square items-center justify-center rounded-lg border-2 border-amber-400 bg-gradient-to-br from-amber-100 to-amber-300 shadow-md">
         <img
           src={`${SPRITE_BASE}/${legend.id}.png`}
           alt={legend.name}
           className="h-[90%] w-[90%] object-contain drop-shadow-[1px_1px_0_rgba(0,0,0,0.25)] transition-transform group-hover:scale-110"
           loading="lazy"
         />
+        <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-0.5 text-[11px] font-bold text-white opacity-0 shadow transition-opacity group-hover:opacity-100">
+          {legend.name}
+        </span>
       </div>
     );
   }

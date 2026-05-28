@@ -279,7 +279,16 @@ def create_patrol_log(
 
     blocks = [payload.block_1, payload.block_2, payload.block_3]
     tier, regular, courage = _compute_tier(blocks)
-    pokemon_idx = random.randint(0, FULL_POOL_SIZE - 1) if tier != "none" else None
+
+    pokemon_idx: int | None = None
+    if tier != "none":
+        state = db.get(CollectionState, 1)
+        if state and state.slot_order:
+            slot_order = json.loads(state.slot_order)
+            next_pos = state.unlocked_count % ROUND_SIZE
+            pokemon_idx = slot_order[next_pos]
+        else:
+            pokemon_idx = random.randint(0, FULL_POOL_SIZE - 1)
 
     log = PatrolLog(
         log_date=payload.log_date,
