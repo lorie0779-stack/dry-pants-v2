@@ -37,34 +37,22 @@ curl https://dry-pants-api.fly.dev/api/error-reasons          # 應看到資料
 
 ---
 
-## B. 前端 → AWS S3（靜態網站）
+## B. 前端 → GitHub Pages（靜態網站）
 
-> 原計畫用 Vercel，但全新 Vercel 帳號被強制走 Pro 付費團隊、Netlify OAuth 又出錯，
-> 故改用「Next 靜態匯出 + S3」——零第三方登入、用既有 AWS 憑證、成本趨近 0。
+> 演進：原本丟 AWS S3，但 AWS 6 個月免費方案到期（資源會停），故改放 GitHub Pages
+>（免費、HTTPS、不綁 AWS）。Vercel 全新帳號被逼 Pro、Netlify OAuth 失敗，皆放棄。
 
-前端已設 `output: "export"`（見 `frontend/next.config.mjs`），可純靜態託管。
+- **正式網址（固定）：`https://lorie0779-stack.github.io/dry-pants-v2/`**
+- 前端設 `output:"export"`（靜態匯出）；GitHub Pages 專案頁是子路徑，故 build 時帶
+  `PAGES_BASE_PATH=/dry-pants-v2`（見 `frontend/next.config.mjs`）。
+- 部署方式：把 `out/` 推到 repo 的 `gh-pages` 分支；Settings→Pages 設 source = gh-pages /root。
+- **repo 必須維持 public**（免費方案 Pages 限公開 repo）。Ryder 資料 JSON 不可進此 repo。
 
-實際使用的 bucket / 網址：
-- Bucket：`dry-pants-ryder-app`（us-east-1，已設 public-read + 靜態網站）
-- 網址：`http://dry-pants-ryder-app.s3-website-us-east-1.amazonaws.com`
-
-### 首次建置（已完成，記錄備查）
+### 日後更新前端（一鍵腳本）
 ```bash
-BK=dry-pants-ryder-app; REGION=us-east-1
-aws s3api create-bucket --bucket "$BK" --region "$REGION"
-aws s3api put-public-access-block --bucket "$BK" --public-access-block-configuration \
-  "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
-aws s3api put-bucket-policy --bucket "$BK" --policy \
-  '{"Version":"2012-10-17","Statement":[{"Sid":"PublicRead","Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::dry-pants-ryder-app/*"}]}'
-aws s3 website "s3://$BK/" --index-document index.html --error-document 404.html
+~/Desktop/dry-pants-v2/deploy-frontend.sh
 ```
-
-### 日後更新前端（改 code 後重跑這三行）
-```bash
-cd ~/Desktop/dry-pants-v2/frontend
-NEXT_PUBLIC_API_URL=https://dry-pants-api.fly.dev npx next build
-aws s3 sync out/ s3://dry-pants-ryder-app/ --delete
-```
+（內容：build → push gh-pages，見該檔。手動等價見「附錄」。）
 
 ### 日後更新後端
 ```bash
@@ -74,7 +62,8 @@ cd ~/Desktop/dry-pants-v2/backend && fly deploy
 ---
 
 ## C. 端到端驗證
-- 開 `http://dry-pants-ryder-app.s3-website-us-east-1.amazonaws.com` → 頁面正常、能讀寫紀錄
+- 開 `https://lorie0779-stack.github.io/dry-pants-v2/` → 頁面正常、能讀寫紀錄
+  （首次開有 Fly 冷啟動約 3–5 秒，正常）
 - DevTools → Network，確認 API 打的是 `https://dry-pants-api.fly.dev/api/...` 且 200
 
 ---
