@@ -64,14 +64,33 @@ describe("DryPantsApp 晚間巡邏按鈕狀態", () => {
     });
   });
 
-  it("TC-F2: tier = none → 「今日巡邏完成」文字", async () => {
+  it("TC-F2: tier = none + 無有說 → 「今天尿濕了，沒有對戰」+ 提示全乾才能收服", async () => {
     mockFetchTodayPatrolLog.mockResolvedValue({
-      ...BASE_LOG, encounter_tier: "none", pokemon_index: null,
+      ...BASE_LOG,
+      block_1: "accident_silent", block_2: "clean", block_3: "clean",
+      regular_stamps: 2, courage_stamps: 0,
+      encounter_tier: "none", pokemon_index: null,
     });
     render(<DryPantsApp />);
     await waitFor(() => {
-      expect(screen.getByText(/今日巡邏完成/)).toBeInTheDocument();
+      expect(screen.getByText(/今天尿濕了，沒有對戰/)).toBeInTheDocument();
     });
+    expect(screen.getByText(/全乾才能收服寶可夢/)).toBeInTheDocument();
+    expect(screen.queryByText(/前往揭曉/)).not.toBeInTheDocument();
+  });
+
+  it("TC-F2b: tier = none + 有說 → 顯示獲得勇氣印章", async () => {
+    mockFetchTodayPatrolLog.mockResolvedValue({
+      ...BASE_LOG,
+      block_1: "accident_told", block_2: "accident_told", block_3: "clean",
+      regular_stamps: 1, courage_stamps: 2,
+      encounter_tier: "none", pokemon_index: null,
+    });
+    render(<DryPantsApp />);
+    await waitFor(() => {
+      expect(screen.getByText(/但你有主動說/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/\+2 勇氣印章/)).toBeInTheDocument();
     expect(screen.queryByText(/前往揭曉/)).not.toBeInTheDocument();
   });
 

@@ -5,6 +5,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DryPantsApp } from "@/components/DryPantsApp";
 
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 jest.mock("@/lib/api", () => ({
   fetchErrorReasons: jest.fn().mockResolvedValue([
     { id: 1, reason_text: "廁所都有人" },
@@ -12,6 +16,19 @@ jest.mock("@/lib/api", () => ({
   ]),
   fetchErrorRecords: jest.fn().mockResolvedValue([]),
   createErrorRecord: jest.fn().mockResolvedValue({}),
+  fetchCollectionState: jest.fn().mockResolvedValue({
+    energy: 0, unlocked_count: 0, coins: 0,
+    slot_order: Array.from({ length: 30 }, (_, i) => i),
+  }),
+  fetchHonorEntries: jest.fn().mockResolvedValue([]),
+  fetchTodayPatrolLog: jest.fn().mockResolvedValue(null),
+  fetchCourageTotal: jest.fn().mockResolvedValue(0),
+  saveCollectionState: jest.fn().mockResolvedValue(undefined),
+  addHonorEntry: jest.fn().mockResolvedValue({}),
+  resetCollectionState: jest.fn().mockResolvedValue(undefined),
+  submitPatrolLog: jest.fn().mockResolvedValue({}),
+  claimPatrolEncounter: jest.fn().mockResolvedValue({}),
+  redeemCourageBand: jest.fn().mockResolvedValue({ courage_bands: 0 }),
 }));
 
 jest.mock("recharts", () => {

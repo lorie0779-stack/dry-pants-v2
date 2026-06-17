@@ -443,7 +443,6 @@ export function DryPantsApp() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState<string | null>(null);
-  const [showCrisis, setShowCrisis] = useState(false);
   const [energy, setEnergy] = useState(0);
   const [coins, setCoins] = useState(0);
   const [unlockedCount, setUnlockedCount] = useState(0);
@@ -455,6 +454,7 @@ export function DryPantsApp() {
   const [showRedeemInput, setShowRedeemInput] = useState(false);
   const [redeemText, setRedeemText] = useState("");
   const [showPatrol, setShowPatrol] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [patrolBlocks, setPatrolBlocks] = useState<[PatrolBlockState, PatrolBlockState, PatrolBlockState]>([null, null, null]);
   const [patrolSubmitting, setPatrolSubmitting] = useState(false);
   const [patrolError, setPatrolError] = useState<string | null>(null);
@@ -526,18 +526,27 @@ export function DryPantsApp() {
     }
   };
 
-  // 增加能量；5 格全亮後，再加第 6 個能量才兌換傳說寶可夢並清空
+  // 能量滿 5 格 → 先展示最終進化 1.2 秒，再兌換傳說並清空。
+  // 用 ref 取得最新 gainLegendaries，避免 effect 相依列表問題；
+  // 此 effect 也涵蓋載入時 DB 已是 5/5 的舊資料，會自動補進化（自我修復卡住狀態）。
+  const gainLegendariesRef = useRef(gainLegendaries);
+  gainLegendariesRef.current = gainLegendaries;
+  useEffect(() => {
+    if (energy < 5) return;
+    const gained = Math.floor(energy / 5);
+    const remainder = energy % 5;
+    const t = setTimeout(() => {
+      setEnergy(remainder);
+      gainLegendariesRef.current(gained, `⭐ 能量滿格！兌換了 ${gained} 隻傳說寶可夢！`);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [energy]);
+
+  // 增加能量；滿 5 格交由上方 effect 統一處理兌換與清空
   const addEnergy = (n: number) => {
     const total = energy + n;
-    if (total > 5) {
-      const gained = Math.floor(total / 5);
-      const remainder = total % 5;
-      setEnergy(remainder);
-      gainLegendaries(gained, `⭐ 能量滿格！兌換了 ${gained} 隻傳說寶可夢！`);
-    } else {
-      setEnergy(total);
-      showMsg(`✅ +${n} 能量！（${total}/5）`);
-    }
+    setEnergy(total);
+    if (total < 5) showMsg(`✅ +${n} 能量！（${total}/5）`);
   };
 
   // 直接解鎖傳說寶可夢（視覺上依序解鎖）
@@ -588,6 +597,8 @@ export function DryPantsApp() {
       setShowPatrol(false);
       setPatrolBlocks([null, null, null]);
       setTodayLog(result);
+      // 今日新增的「有說」即時累加進勇氣印章總計（否則進度條要重整才更新）
+      setCourageTotal((prev) => prev + (result.courage_stamps ?? 0));
       if (result.encounter_tier && result.encounter_tier !== "none" && result.pokemon_index !== null) {
         const poke = LEGENDARY_POOL[result.pokemon_index];
         if (poke) {
@@ -595,7 +606,12 @@ export function DryPantsApp() {
           return;
         }
       }
-      showMsg("📋 巡邏紀錄完成！今天沒有對戰機會，明天繼續加油！", 3500);
+      const told = result.courage_stamps ?? 0;
+      if (told > 0) {
+        showMsg(`💧 今天有尿濕，沒有對戰機會～但你主動說了，+${told} 勇氣印章 💛 明天全乾就能收服寶可夢！`, 4500);
+      } else {
+        showMsg("💧 今天尿濕了又沒說，沒有對戰也沒有印章。明天全乾才能收服寶可夢喔！", 4500);
+      }
     } catch (e) {
       setPatrolError(e instanceof Error ? e.message : "送出失敗");
     } finally {
@@ -742,6 +758,69 @@ export function DryPantsApp() {
           </div>
         </div>
       )}
+      {showRules && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) setShowRules(false); }}>
+          <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-8 shadow-2xl animate-drypants-fade-in">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-black text-slate-800">📖 遊戲規則說明</h2>
+              <button type="button" onClick={() => setShowRules(false)} className="text-slate-400 text-xl leading-none">✕</button>
+            </div>
+
+            <div className="space-y-4 text-sm leading-relaxed text-slate-700">
+              <div>
+                <p className="mb-1 font-black text-slate-800">🎯 目標</p>
+                <p>收服傳說寶可夢、讓能量進化、集滿勇氣印章換腕帶。乾爽就是力量！</p>
+              </div>
+
+              <div className="rounded-2xl bg-indigo-50 p-3">
+                <p className="mb-1.5 font-black text-indigo-800">🌙 晚間巡邏報告（每天一次）</p>
+                <p className="mb-2">每天記錄早上、下午、晚上三個時段，每格三選一：</p>
+                <ul className="space-y-1 text-[13px]">
+                  <li><span className="font-bold">🛡️ 乾燥</span>＝乾爽過關</li>
+                  <li><span className="font-bold">💧 有說</span>＝尿濕了但主動告訴大人</li>
+                  <li><span className="font-bold">🤫 沒說</span>＝尿濕了沒有說</li>
+                </ul>
+              </div>
+
+              <div className="rounded-2xl bg-amber-50 p-3">
+                <p className="mb-1.5 font-black text-amber-800">⚔️ 開戰收服規則</p>
+                <ul className="space-y-1 text-[13px]">
+                  <li>✅ <span className="font-bold">三格全乾</span> → 開戰！收服 1 隻寶可夢（70% 傳說 ✨／30% 野生）</li>
+                  <li>❌ <span className="font-bold">只要有一格尿濕</span>（有說或沒說）→ <span className="font-bold text-red-600">當天不能對戰</span></li>
+                </ul>
+                <p className="mt-2 text-[12px] text-amber-700">尿濕會失去今天收服寶可夢的機會，所以要努力保持乾爽喔！</p>
+              </div>
+
+              <div className="rounded-2xl bg-yellow-50 p-3">
+                <p className="mb-1.5 font-black text-yellow-800">💛 勇氣印章</p>
+                <p className="text-[13px]">尿濕了但<span className="font-bold">主動說</span>，每一格 +1 勇氣印章（誠實很勇敢！）。集滿 <span className="font-bold">5 枚 → 兌換極巨腕帶 ⚡</span></p>
+              </div>
+
+              <div className="rounded-2xl bg-orange-50 p-3">
+                <p className="mb-1.5 font-black text-orange-800">🔥 能量進化</p>
+                <p className="text-[13px]"><span className="font-bold">🚽 去尿尿 +1 能量</span>，集滿 5 格能量 → 進化並收服 1 隻傳說寶可夢。</p>
+              </div>
+
+              <div className="rounded-2xl bg-emerald-50 p-3">
+                <p className="mb-1.5 font-black text-emerald-800">🎁 其他獎勵</p>
+                <ul className="space-y-1 text-[13px]">
+                  <li>🏫 放學檢查 → +2 傳說</li>
+                  <li>🏠 時段守護 → +1 傳說</li>
+                  <li>🥚 集滿 30 隻傳說 → 清空換 1 顆扭蛋幣，可兌換實體獎品</li>
+                </ul>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowRules(false)}
+              className="mt-5 w-full rounded-2xl bg-indigo-600 py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99]"
+            >
+              我知道了！
+            </button>
+          </div>
+        </div>
+      )}
       <div className="bg-gradient-to-b from-sky-300 via-sky-200/80 to-[#7ae84a] px-3 pb-3 pt-5">
         <h1 className="font-pixel-title px-1 text-center text-sm leading-snug text-slate-900 sm:text-base">
           Ryder 的乾爽大冒險
@@ -874,10 +953,17 @@ export function DryPantsApp() {
                       🌙 晚間巡邏報告
                     </button>
                   ) : todayLog.encounter_tier === "none" ? (
-                    <div className="w-full rounded-2xl bg-slate-200 py-3.5 text-center text-sm font-bold text-slate-500">
-                      📋 今日巡邏完成
-                      <div className="text-xs font-normal text-slate-400 mt-0.5">明天再來！</div>
-                    </div>
+                    (todayLog.courage_stamps ?? 0) > 0 ? (
+                      <div className="w-full rounded-2xl bg-amber-100 py-3.5 text-center text-sm font-bold text-amber-700 ring-1 ring-amber-300">
+                        💧 今天尿濕了，沒有對戰
+                        <div className="text-xs font-normal text-amber-600 mt-0.5">但你有主動說，+{todayLog.courage_stamps} 勇氣印章 💛</div>
+                      </div>
+                    ) : (
+                      <div className="w-full rounded-2xl bg-slate-200 py-3.5 text-center text-sm font-bold text-slate-500">
+                        💧 今天尿濕了，沒有對戰
+                        <div className="text-xs font-normal text-slate-400 mt-0.5">明天全乾才能收服寶可夢！</div>
+                      </div>
+                    )
                   ) : !todayLog.claimed ? (
                     <button
                       type="button"
@@ -957,41 +1043,15 @@ export function DryPantsApp() {
                       🚽 去尿尿（+1 能量）
                     </button>
                   </div>
+                  {/* 「發生意外（補救）」已隱藏：主動通報與巡邏報告的「有說」重疊；
+                      「自己清理」的正規入庫做法待重新設計（折進巡邏報告當加分項）。 */}
                   <button
                     type="button"
-                    onClick={() => setShowCrisis((v) => !v)}
-                    className="w-full rounded-2xl border-2 border-slate-300 bg-slate-100 py-2.5 text-xs font-bold text-slate-600"
+                    onClick={() => setShowRules(true)}
+                    className="w-full rounded-2xl border-2 border-slate-300 bg-white py-2.5 text-xs font-bold text-slate-600"
                   >
-                    ⚠️ 發生意外（補救）{showCrisis ? " ▲" : " ▼"}
+                    📖 遊戲規則說明
                   </button>
-
-                  {showCrisis && (
-                    <div className="rounded-2xl border-2 border-dashed border-red-300 bg-red-50 px-3 py-3">
-                      <p className="mb-2.5 text-center text-[11px] font-bold text-red-600">
-                        雖然星星熄滅了，但你可以補救！
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { addEnergy(1); setShowCrisis(false); }}
-                          className="rounded-2xl bg-slate-500 py-3 text-xs font-bold text-white shadow active:scale-[0.98]"
-                        >
-                          主動通報
-                          <br />
-                          <span className="text-[10px] font-normal">(+1 能量)</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { addEnergy(2); setShowCrisis(false); }}
-                          className="rounded-2xl bg-slate-600 py-3 text-xs font-bold text-white shadow active:scale-[0.98]"
-                        >
-                          自己清理
-                          <br />
-                          <span className="text-[10px] font-normal">(+2 能量)</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </section>
 
@@ -1339,6 +1399,9 @@ export function DryPantsApp() {
               setUnlockedCount(0);
               setCoins(0);
               setHonorEntries([]);
+              setTodayLog(null);        // 清掉今日巡邏 → 可立即重新測試巡邏
+              setCourageTotal(0);       // 勇氣印章歸零
+              setCourageBands(0);
               if (fresh) setSlotOrder(fresh.slot_order);
               stateLoaded.current = true;
               showMsg("🔄 已重置所有進度");

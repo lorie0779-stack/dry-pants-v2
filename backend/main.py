@@ -252,16 +252,13 @@ VALID_BLOCKS = {"clean", "accident_told", "accident_silent"}
 
 
 def _compute_tier(blocks: list[str]) -> tuple[str, int, int]:
+    # 規則：乾爽是收服寶可夢的「入場券」——三格全乾才開戰；
+    # 只要有一格尿濕（有說或沒說）當天就不開戰，讓 Ryder 清楚「尿濕＝失去收服機會」。
+    # 勇氣印章獨立計算：每一格「有說」（尿濕但主動說）+1 枚，鼓勵誠實。
     regular = sum(1 for b in blocks if b == "clean")
     courage = sum(1 for b in blocks if b == "accident_told")
     if regular == 3:
         tier = "legendary" if random.random() < 0.7 else "normal"
-    elif regular == 2:
-        tier = "normal"
-    elif regular == 1:
-        tier = "luck"
-    elif courage > 0:
-        tier = "courage"
     else:
         tier = "none"
     return tier, regular, courage
@@ -375,6 +372,9 @@ def redeem_courage_band(db: Session = Depends(get_db)) -> CollectionStateOut:
 @app.post("/api/collection-state/reset", status_code=204)
 def reset_collection_state(db: Session = Depends(get_db)) -> None:
     db.execute(text("DELETE FROM honor_entries"))
+    # 同步清空巡邏紀錄：否則今日 log 仍在會擋住重新測試（409），
+    # 且勇氣印章總計是從 patrol_logs 加總，不清就無法歸零。
+    db.execute(text("DELETE FROM patrol_logs"))
     row = db.get(CollectionState, 1)
     if row is None:
         row = CollectionState(id=1)

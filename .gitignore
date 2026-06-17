@@ -18,3 +18,4 @@ frontend/.env.local
 # 個資/進度備份，勿進公開 repo（留本機備份）
 backend/data-backup.json
 backend/v1-localstorage-backup.json
+.gstack/
