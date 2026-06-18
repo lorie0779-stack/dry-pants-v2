@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { claimPatrolEncounter } from '@/lib/api';
+import { claimPatrolEncounter, releasePatrolEncounter } from '@/lib/api';
 
 const SPRITE_BASE =
   'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home';
@@ -84,6 +84,8 @@ function EncounterScreen() {
 
   const [phase, setPhase] = useState<Phase>('shaking');
   const [claiming, setClaiming] = useState(false);
+  const [releasing, setReleasing] = useState(false);
+  const [confirmRelease, setConfirmRelease] = useState(false);
   const [pokemon, setPokemon] = useState(DEMO_POOL[0]);
   const [rockCount, setRockCount] = useState(0);
 
@@ -247,24 +249,72 @@ function EncounterScreen() {
         >
           <p className="text-green-400 font-bold text-lg mb-1">獲得了！</p>
           <p className="text-gray-400 text-sm mb-4">{pokemon.name} 加入你的冒險隊伍！</p>
-          {paramId && (
-            <button
-              onClick={async () => {
-                if (claiming) return;
-                setClaiming(true);
-                try {
-                  await claimPatrolEncounter();
-                } catch {
-                  // 409 already claimed is fine; other errors — still navigate home
-                }
-                router.push('/');
-              }}
-              disabled={claiming}
-              className="px-10 py-4 bg-green-500 hover:bg-green-600 active:scale-95 disabled:opacity-60 text-white font-bold rounded-full text-base shadow-xl transition-all"
+          {paramId && !confirmRelease && (
+            <div
+              className="flex items-center justify-center gap-3"
               style={{ animation: 'slideUp 0.5s ease-out 0.5s both' }}
             >
-              {claiming ? '加入中…' : '✓ 加入圖鑑！'}
-            </button>
+              <button
+                onClick={async () => {
+                  if (claiming || releasing) return;
+                  setClaiming(true);
+                  try {
+                    await claimPatrolEncounter();
+                  } catch {
+                    // 409 already claimed is fine; other errors — still navigate home
+                  }
+                  router.push('/');
+                }}
+                disabled={claiming || releasing}
+                className="px-8 py-4 bg-green-500 hover:bg-green-600 active:scale-95 disabled:opacity-60 text-white font-bold rounded-full text-base shadow-xl transition-all"
+              >
+                {claiming ? '加入中…' : '✓ 加入圖鑑！'}
+              </button>
+              <button
+                onClick={() => setConfirmRelease(true)}
+                disabled={claiming || releasing}
+                className="px-8 py-4 bg-red-500 hover:bg-red-600 active:scale-95 disabled:opacity-60 text-white font-bold rounded-full text-base shadow-xl transition-all"
+              >
+                💛 放生牠
+              </button>
+            </div>
+          )}
+
+          {paramId && confirmRelease && (
+            <div
+              className="flex flex-col items-center gap-3 rounded-2xl bg-white/10 px-5 py-4"
+              style={{ animation: 'slideUp 0.3s ease-out both' }}
+            >
+              <p className="text-yellow-200 text-sm font-bold">
+                確定放生 {pokemon.name} 嗎？
+              </p>
+              <p className="text-gray-400 text-xs">放生後今天就不能再收服牠囉</p>
+              <div className="flex gap-3 mt-1">
+                <button
+                  onClick={async () => {
+                    if (releasing) return;
+                    setReleasing(true);
+                    try {
+                      await releasePatrolEncounter();
+                    } catch {
+                      // 409/404：今日已處理也無妨，照樣回首頁
+                    }
+                    router.push('/');
+                  }}
+                  disabled={releasing}
+                  className="px-6 py-3 bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:opacity-60 text-white font-bold rounded-full text-sm shadow-lg transition-all"
+                >
+                  {releasing ? '放生中…' : '💛 確定放生'}
+                </button>
+                <button
+                  onClick={() => setConfirmRelease(false)}
+                  disabled={releasing}
+                  className="px-6 py-3 bg-white/20 hover:bg-white/30 active:scale-95 disabled:opacity-60 text-white font-bold rounded-full text-sm transition-all"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

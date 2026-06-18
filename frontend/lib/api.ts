@@ -141,6 +141,7 @@ export type PatrolLogDTO = {
   encounter_tier: string | null;
   pokemon_index: number | null;
   claimed: boolean;
+  released: boolean;
   created_at: string;
 };
 
@@ -180,6 +181,17 @@ export async function claimPatrolEncounter(): Promise<CollectionStateDTO> {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `領取失敗：${res.status}`);
+  }
+  return res.json();
+}
+
+export async function releasePatrolEncounter(): Promise<PatrolLogDTO> {
+  const res = await fetch(`${getApiBase()}/api/patrol-log/release`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `放生失敗：${res.status}`);
   }
   return res.json();
 }

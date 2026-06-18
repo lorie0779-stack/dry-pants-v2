@@ -977,6 +977,11 @@ export function DryPantsApp() {
                     >
                       ✨ 前往揭曉！
                     </button>
+                  ) : todayLog.released ? (
+                    <div className="w-full rounded-2xl bg-amber-100 py-3.5 text-center text-sm font-bold text-amber-700 ring-1 ring-amber-300">
+                      💛 今天放生了一隻寶可夢
+                      <div className="text-xs font-normal text-amber-600 mt-0.5">把機會留給大自然，明天再加油！</div>
+                    </div>
                   ) : (
                     <div className="w-full rounded-2xl bg-green-500 py-3.5 text-center text-sm font-bold text-white shadow-md">
                       ✓ 今日已捕獲

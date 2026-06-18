@@ -117,6 +117,7 @@ class PatrolLogOut(BaseModel):
     encounter_tier: str | None
     pokemon_index: int | None
     claimed: bool
+    released: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

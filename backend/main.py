@@ -3,7 +3,7 @@ import random
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import date as date_type
+from datetime import date as date_type, datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -74,6 +74,14 @@ def init_db() -> None:
     with engine.connect() as conn:
         try:
             conn.execute(text("ALTER TABLE patrol_logs ADD COLUMN claimed INTEGER DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
+    # Migration: add released column to patrol_logs
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE patrol_logs ADD COLUMN released INTEGER DEFAULT 0"))
             conn.commit()
         except Exception:
             pass  # column already exists
@@ -229,9 +237,18 @@ def save_collection_state(
 
 @app.get("/api/honor-entries", response_model=list[HonorEntryOut])
 def list_honor_entries(db: Session = Depends(get_db)) -> list[HonorEntryOut]:
-    rows = (
-        db.execute(select(HonorEntry).order_by(HonorEntry.id.desc())).scalars().all()
-    )
+    rows = db.execute(select(HonorEntry)).scalars().all()
+
+    # 依兌換時間降冪（最新在最上面）。entry_time 為字串，舊資料未補零、
+    # 新資料補零，純字串排序不可靠，故解析成 datetime 後排序；
+    # 解析失敗者退回 id 當次序，排在最後。
+    def sort_key(r: HonorEntry) -> tuple[datetime, int]:
+        try:
+            return (datetime.strptime(r.entry_time, "%Y/%m/%d %H:%M"), r.id)
+        except (ValueError, TypeError):
+            return (datetime.min, r.id)
+
+    rows = sorted(rows, key=sort_key, reverse=True)
     return [HonorEntryOut.model_validate(r) for r in rows]
 
 
@@ -342,6 +359,30 @@ def claim_patrol_encounter(db: Session = Depends(get_db)) -> CollectionStateOut:
     db.commit()
     db.refresh(row)
     return _state_to_out(row)
+
+
+@app.post("/api/patrol-log/release", response_model=PatrolLogOut)
+def release_patrol_encounter(db: Session = Depends(get_db)) -> PatrolLogOut:
+    """放生今日遭遇戰的寶可夢：標記已處理但不收進圖鑑（unlocked_count 不變）。
+    與 claim 互斥——放生後今日不可再領取。"""
+    today = date_type.today()
+    log = db.execute(
+        select(PatrolLog).where(PatrolLog.log_date == today)
+    ).scalar_one_or_none()
+    if log is None:
+        raise HTTPException(status_code=404, detail="今日尚無巡邏記錄")
+    if log.encounter_tier == "none" or log.pokemon_index is None:
+        raise HTTPException(status_code=422, detail="今日遭遇等級為 none，無法放生")
+    if log.claimed:
+        raise HTTPException(status_code=409, detail="今日遭遇戰已領取，無法放生")
+    if log.released:
+        raise HTTPException(status_code=409, detail="今日已放生")
+
+    log.claimed = True  # 標記已處理，擋掉後續 claim
+    log.released = True
+    db.commit()
+    db.refresh(log)
+    return PatrolLogOut.model_validate(log)
 
 
 @app.get("/api/patrol-log/courage-total", response_model=CourageTotalOut)
