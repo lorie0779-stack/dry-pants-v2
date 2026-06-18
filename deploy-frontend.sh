@@ -2,8 +2,9 @@
 # dry-pants 前端一鍵部署到 GitHub Pages（build → 推 gh-pages 分支）
 set -euo pipefail
 cd "$(dirname "$0")/frontend"
-echo "▶ build（含 basePath + Fly 後端）…"
+echo "▶ build（含 basePath + Fly 後端，獨立 distDir 不擾 dev）…"
 env -u NODE_OPTIONS PAGES_BASE_PATH=/dry-pants-v2 \
+  NEXT_BUILD_DIR=.next-deploy \
   NEXT_PUBLIC_API_URL=https://dry-pants-api.fly.dev npx next build
 touch out/.nojekyll
 echo "▶ 推 gh-pages…"
