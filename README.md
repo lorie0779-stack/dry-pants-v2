@@ -91,13 +91,15 @@ cd ~/dry-pants-v2
 docker compose up -d --build
 ```
 
-### 日常更新（本機執行，一鍵搞定）
+### 日常更新（Fly.io + GitHub Pages）
 
 ```bash
-bash push-deploy.sh "修改說明"
+git push origin master          # 同步 GitHub + 觸發 CI
+cd backend && fly deploy         # 後端上 Fly.io（app=dry-pants-api）
+bash deploy-frontend.sh          # 前端 build + 推 gh-pages
 ```
 
-執行流程：`git commit` → `git push` → SSH 進 EC2 → `git pull` → `docker compose up -d --build`
+> 註：下方 EC2 / Docker Compose / SSH 章節為舊架構（已脫離 AWS），保留備查。
 
 ### SSH 連線
 

@@ -39,13 +39,17 @@ cd frontend && npm run dev                # :3000
 
 前端吃 `frontend/.env.local` 的 `NEXT_PUBLIC_API_URL`，本機預設 `http://localhost:8000`。
 
-## 部署（EC2）
+## 部署（Fly.io + GitHub Pages，已脫離 AWS/EC2）
 ```bash
-# 根目錄 .env 填入 EC2_PUBLIC_IP，再執行：
-./push-deploy.sh
+# 1. 推原始碼（不觸發部署，僅同步 GitHub + 跑 CI）
+git push origin master
+# 2. 後端上 Fly.io（app=dry-pants-api）
+cd backend && fly deploy
+# 3. 前端 build + 推 gh-pages（用獨立 distDir，不擾 dev server）
+bash deploy-frontend.sh
 ```
-Docker Compose 起三個容器：backend(:8000) → frontend(:3000) → nginx(:80)。
-SQLite 資料掛載至 named volume `db_data`，重建容器不遺失。
+後端改了邏輯時前後端都要重部署。線上：
+前端 https://lorie0779-stack.github.io/dry-pants-v2/ 、後端 https://dry-pants-api.fly.dev/
 
 ## API 端點（backend/main.py）
 | Method | Path | 說明 |
