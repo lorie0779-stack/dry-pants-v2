@@ -17,8 +17,7 @@ dry-pants-v2/
 │   ├── schemas.py     # Pydantic schemas
 │   └── database.py    # DB 連線設定
 ├── docker-compose.yml # backend + frontend + nginx
-├── nginx.conf         # 反向代理設定
-└── infra/ec2-setup.sh # EC2 部署初始化腳本
+└── nginx.conf         # 反向代理設定
 ```
 
 ## 技術棧
@@ -26,7 +25,7 @@ dry-pants-v2/
 |---|---|
 | 前端 | Next.js、TypeScript、Tailwind CSS、Recharts |
 | 後端 | FastAPI、SQLAlchemy（sync）、Pydantic v2、SQLite |
-| 基礎設施 | Docker Compose、Nginx、AWS EC2 |
+| 基礎設施 | Fly.io（後端）、GitHub Pages（前端）、Docker Compose + Nginx（僅本機） |
 
 ## 本機開發
 ```bash
@@ -104,6 +103,3 @@ ROUND_SIZE = 30       # 每輪隨機抽取的格數
 - 完成一個階段後給我摘要就好
 - 不需要逐行解釋每個改動
 - 請用繁體中文回覆
-
-## 語言設定
-請一律使用繁體中文回覆。
