@@ -1,12 +1,10 @@
 /**
- * 「家長專用】重置所有進度」按鈕，reset 後端呼叫失敗分支
- * （DryPantsApp.tsx:1580-1604）。
+ * 「【家長專用】重置所有進度」按鈕，reset 後端呼叫失敗分支
+ * （DryPantsApp.tsx reset onClick，非樂觀更新版）。
  *
- * 現況行為：resetCollectionState() 失敗會被 .catch(() => {}) 吞掉，
- * 但後續清零本地 state（energy/coins/unlockedCount/...）與顯示
- * 「🔄 已重置所有進度」訊息完全不受影響——這是「樂觀重置」，前端
- * 不會因為後端失敗而回報使用者任何錯誤，畫面看起來一定成功。
- * 本測試斷言「現況」，此為已知風險（前後端可能不一致），不代表這是預期正確行為。
+ * 修復後行為：先 await resetCollectionState()，成功才清畫面狀態；
+ * 失敗則保留原狀態、顯示「❌ 重置失敗，請檢查網路後再試」，
+ * 且不出現「已重置所有進度」假成功訊息。
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -46,33 +44,25 @@ jest.mock("@/lib/api", () => ({
   createErrorRecord: jest.fn().mockResolvedValue({}),
 }));
 
-describe("DryPantsApp 重置按鈕：後端 reset 失敗時的現況行為", () => {
+const NONZERO_STATE = {
+  energy: 3,
+  unlocked_count: 12,
+  coins: 7,
+  slot_order: Array.from({ length: 30 }, (_, i) => i),
+  courage_bands: 2,
+  wild_collection: [],
+};
+
+describe("DryPantsApp 重置按鈕：非樂觀更新", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // 初次載入給一組非零值，才能觀察「重置後歸零」有沒有真的發生
-    mockFetchCollectionState.mockResolvedValue({
-      energy: 3,
-      unlocked_count: 12,
-      coins: 7,
-      slot_order: Array.from({ length: 30 }, (_, i) => i),
-      courage_bands: 2,
-      wild_collection: [],
-    });
+    // 初次載入給一組非零值，才能觀察「有沒有被清零」
+    mockFetchCollectionState.mockResolvedValue(NONZERO_STATE);
     window.confirm = jest.fn().mockReturnValue(true);
   });
 
-  it("resetCollectionState 失敗時，畫面仍樂觀清零並顯示重置成功訊息（現況，非驗證正確性）", async () => {
-    mockResetCollectionState.mockRejectedValue(new Error("backend down"));
-    // 重置後會再打一次 fetchCollectionState 取得新 slot_order；同樣讓它失敗，
-    // 對應 fresh = await fetchCollectionState().catch(() => null) 的 null 分支
-    mockFetchCollectionState.mockResolvedValueOnce({
-      energy: 3,
-      unlocked_count: 12,
-      coins: 7,
-      slot_order: Array.from({ length: 30 }, (_, i) => i),
-      courage_bands: 2,
-      wild_collection: [],
-    });
+  it("resetCollectionState 失敗 → 狀態不清零、顯示錯誤訊息、無假成功訊息", async () => {
+    mockResetCollectionState.mockRejectedValue(new Error("重置進度失敗：500"));
 
     const user = userEvent.setup();
     render(<DryPantsApp />);
@@ -82,8 +72,32 @@ describe("DryPantsApp 重置按鈕：後端 reset 失敗時的現況行為", () 
       expect(screen.getByText(/x 7/)).toBeInTheDocument();
     });
 
-    // 第二次呼叫（reset 流程內的 fresh fetch）也失敗，才能驗證 fresh=null 分支
-    mockFetchCollectionState.mockRejectedValueOnce(new Error("backend down"));
+    const resetButton = screen.getByText(/家長專用.*重置所有進度/);
+    await user.click(resetButton);
+
+    // 顯示可讀錯誤訊息
+    await waitFor(() => {
+      expect(screen.getByText(/重置失敗，請檢查網路後再試/)).toBeInTheDocument();
+    });
+
+    // 狀態未被清零：扭蛋幣仍為 7、傳說進度仍為 12/30
+    expect(screen.getByText(/x 7/)).toBeInTheDocument();
+    expect(screen.getByText(/\(12\/30\)/)).toBeInTheDocument();
+
+    // 不出現假成功訊息
+    expect(screen.queryByText(/已重置所有進度/)).not.toBeInTheDocument();
+    expect(mockResetCollectionState).toHaveBeenCalledTimes(1);
+  });
+
+  it("resetCollectionState 成功 → 狀態清零並顯示成功訊息", async () => {
+    mockResetCollectionState.mockResolvedValue(undefined);
+
+    const user = userEvent.setup();
+    render(<DryPantsApp />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/x 7/)).toBeInTheDocument();
+    });
 
     const resetButton = screen.getByText(/家長專用.*重置所有進度/);
     await user.click(resetButton);
@@ -91,14 +105,8 @@ describe("DryPantsApp 重置按鈕：後端 reset 失敗時的現況行為", () 
     await waitFor(() => {
       expect(screen.getByText(/已重置所有進度/)).toBeInTheDocument();
     });
-
-    // 樂觀清零：即使 resetCollectionState 與後續 fetchCollectionState 都失敗，
-    // 畫面仍顯示歸零（現況：前後端可能不一致，使用者無感知）
     expect(screen.getByText(/x 0/)).toBeInTheDocument();
     expect(screen.getByText(/\(0\/30\)/)).toBeInTheDocument();
-
-    // 沒有任何錯誤提示
-    expect(screen.queryByText(/失敗/)).not.toBeInTheDocument();
-    expect(mockResetCollectionState).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/重置失敗/)).not.toBeInTheDocument();
   });
 });

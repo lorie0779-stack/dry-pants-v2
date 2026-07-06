@@ -15,6 +15,8 @@ class CollectionState(Base):
     coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     slot_order: Mapped[str | None] = mapped_column(String(256), nullable=True, default=None)
     courage_bands: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 野生圖鑑：JSON 陣列，每筆 {"species_id": int, "mega": bool}。預設 "[]"。
+    wild_collection: Mapped[str | None] = mapped_column(String(2048), nullable=True, default=None)
 
 
 class PatrolLog(Base):

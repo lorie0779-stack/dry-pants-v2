@@ -5,7 +5,7 @@ slot_order 四欄，handler（main.py:255-258）也只寫這四欄——courage_
 wild_collection 完全不在讀寫路徑上，因此理論上「PUT 缺欄位」不會清掉它們
 （它們本來就不是這支 API 的職責範圍）。以下測試斷言「現況行為」。
 
-同時涵蓋負值 coins 現況（後端無範圍驗證，接受任何整數）。
+同時涵蓋負值驗證：energy/unlocked_count/coins 有 Field(ge=0)，負值回 422。
 """
 from __future__ import annotations
 
@@ -72,24 +72,27 @@ def test_put_collection_state_missing_optional_fields_preserves_them(
     assert data["wild_collection"] == [{"species_id": 6, "mega": True}]
 
 
-def test_put_collection_state_accepts_negative_coins_no_validation(
-    client: TestClient,
-) -> None:
-    """現況行為（已知風險，非本次修復範圍）：後端對 coins 沒有下限驗證，
-    負值會被原樣接受並寫入 DB。前端理論上可以把 coins 打成負數。
-    此測試斷言現況，不代表這是預期行為——列入回報發現。"""
-    payload = {
-        "energy": 0,
-        "unlocked_count": 0,
-        "coins": -5,
+def test_put_collection_state_rejects_negative_values(client: TestClient) -> None:
+    """energy/unlocked_count/coins 均有 Field(ge=0) 驗證（schemas.py CollectionStateIn），
+    負值 → 422，且 DB 內原值不受影響。"""
+    baseline = {
+        "energy": 1,
+        "unlocked_count": 2,
+        "coins": 3,
         "slot_order": list(range(30)),
     }
-    res = client.put("/api/collection-state", json=payload)
-    assert res.status_code == 200, res.text
-    assert res.json()["coins"] == -5
+    assert client.put("/api/collection-state", json=baseline).status_code == 200
 
-    get_res = client.get("/api/collection-state")
-    assert get_res.json()["coins"] == -5
+    for field in ("energy", "unlocked_count", "coins"):
+        payload = {**baseline, field: -5}
+        res = client.put("/api/collection-state", json=payload)
+        assert res.status_code == 422, f"{field} 為負值時應回 422，實際 {res.status_code}"
+
+    # 負值被擋下後，DB 原值不受影響
+    data = client.get("/api/collection-state").json()
+    assert data["energy"] == 1
+    assert data["unlocked_count"] == 2
+    assert data["coins"] == 3
 
 
 def test_put_collection_state_creates_row_when_absent(client: TestClient) -> None:
