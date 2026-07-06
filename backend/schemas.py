@@ -79,20 +79,30 @@ class ErrorRecordRow(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class WildEntry(BaseModel):
+    species_id: int
+    mega: bool = False
+
+
+class WildMegamaxIn(BaseModel):
+    species_id: int
+
+
 class CollectionStateOut(BaseModel):
     energy: int
     unlocked_count: int
     coins: int
     slot_order: list[int]
     courage_bands: int = 0
+    wild_collection: list[WildEntry] = []
 
     model_config = {"from_attributes": True}
 
 
 class CollectionStateIn(BaseModel):
-    energy: int
-    unlocked_count: int
-    coins: int
+    energy: int = Field(..., ge=0, description="能量值，不可為負")
+    unlocked_count: int = Field(..., ge=0, description="已解鎖傳說數，不可為負")
+    coins: int = Field(..., ge=0, description="扭蛋幣，不可為負")
     slot_order: list[int]
 
 

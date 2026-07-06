@@ -67,12 +67,15 @@ export async function createErrorRecord(
 
 // ── Collection State ──────────────────────────────────────────────────────────
 
+export type WildEntryDTO = { species_id: number; mega: boolean };
+
 export type CollectionStateDTO = {
   energy: number;
   unlocked_count: number;
   coins: number;
   slot_order: number[];
   courage_bands?: number;
+  wild_collection?: WildEntryDTO[];
 };
 
 export type HonorEntryDTO = {
@@ -121,9 +124,10 @@ export async function addHonorEntry(entry: {
 }
 
 export async function resetCollectionState(): Promise<void> {
-  await fetch(`${getApiBase()}/api/collection-state/reset`, {
+  const res = await fetch(`${getApiBase()}/api/collection-state/reset`, {
     method: "POST",
   });
+  if (!res.ok) throw new Error(`重置進度失敗：${res.status}`);
 }
 
 // ── Patrol Log ────────────────────────────────────────────────────────────────
@@ -181,6 +185,19 @@ export async function claimPatrolEncounter(): Promise<CollectionStateDTO> {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `領取失敗：${res.status}`);
+  }
+  return res.json();
+}
+
+export async function megamaxWild(speciesId: number): Promise<CollectionStateDTO> {
+  const res = await fetch(`${getApiBase()}/api/wild/megamax`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ species_id: speciesId }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `極巨化失敗：${res.status}`);
   }
   return res.json();
 }

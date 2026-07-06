@@ -22,10 +22,20 @@ from schemas import (
     HonorEntryOut,
     PatrolLogIn,
     PatrolLogOut,
+    WildMegamaxIn,
 )
 
-FULL_POOL_SIZE = 94   # 完整傳說池大小（71 is_legendary + 23 is_mythical，Gen 1–9）
+FULL_POOL_SIZE = 92   # 傳說池大小（原 94，移除武道熊師/美錄梅塔→歸野生池可巨大化）
 ROUND_SIZE = 30       # 每輪隨機取的數量
+WILD_POOL_SIZE = 30   # 野生圖鑑大小（有 Gmax 型態的 30 隻）
+
+# 野生池 species_id，順序須與前端 WILD_POOL 陣列完全一致（pokemon_index 兩邊共用）。
+# 改動順序時兩邊一起改。
+WILD_POOL_IDS = [
+    3, 6, 9, 12, 25, 52, 68, 94, 99, 131, 133, 143,        # 國民級 12
+    812, 815, 818, 823, 869, 892, 809, 569,                # 中段 8（892 武道熊師、809 美錄梅塔）
+    834, 839, 841, 842, 844, 849, 851, 858, 861, 879,      # 中後段 10
+]
 
 
 def _make_slot_order() -> str:
@@ -90,6 +100,14 @@ def init_db() -> None:
     with engine.connect() as conn:
         try:
             conn.execute(text("ALTER TABLE collection_state ADD COLUMN courage_bands INTEGER DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
+    # Migration: add wild_collection column to collection_state
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE collection_state ADD COLUMN wild_collection VARCHAR(2048)"))
             conn.commit()
         except Exception:
             pass  # column already exists
@@ -200,6 +218,7 @@ def _state_to_out(row: CollectionState) -> CollectionStateOut:
         coins=row.coins,
         slot_order=json.loads(row.slot_order) if row.slot_order else list(range(ROUND_SIZE)),
         courage_bands=row.courage_bands if row.courage_bands is not None else 0,
+        wild_collection=json.loads(row.wild_collection) if row.wild_collection else [],
     )
 
 
@@ -215,6 +234,13 @@ def get_collection_state(db: Session = Depends(get_db)) -> CollectionStateOut:
         row.slot_order = _make_slot_order()
         db.commit()
         db.refresh(row)
+    else:
+        # 自癒：舊 slot_order 可能含已縮小的池越界 index（94→92 後的 92/93），重洗。
+        existing = json.loads(row.slot_order)
+        if any(i >= FULL_POOL_SIZE for i in existing) or len(existing) != ROUND_SIZE:
+            row.slot_order = _make_slot_order()
+            db.commit()
+            db.refresh(row)
     return _state_to_out(row)
 
 
@@ -295,7 +321,8 @@ def create_patrol_log(
     tier, regular, courage = _compute_tier(blocks)
 
     pokemon_idx: int | None = None
-    if tier != "none":
+    if tier == "legendary":
+        # 傳說：依 slot_order 取下一格（index 指進前端 LEGENDARY_POOL）
         state = db.get(CollectionState, 1)
         if state and state.slot_order:
             slot_order = json.loads(state.slot_order)
@@ -303,6 +330,9 @@ def create_patrol_log(
             pokemon_idx = slot_order[next_pos]
         else:
             pokemon_idx = random.randint(0, FULL_POOL_SIZE - 1)
+    elif tier == "normal":
+        # 野生：隨機抽一隻（index 指進前端 WILD_POOL / 後端 WILD_POOL_IDS）
+        pokemon_idx = random.randint(0, WILD_POOL_SIZE - 1)
 
     log = PatrolLog(
         log_date=payload.log_date,
@@ -349,12 +379,22 @@ def claim_patrol_encounter(db: Session = Depends(get_db)) -> CollectionStateOut:
     if row is None:
         row = CollectionState(id=1, energy=0, unlocked_count=0, coins=0)
         db.add(row)
-    row.unlocked_count += 1
-    if row.unlocked_count >= ROUND_SIZE:
-        coins_gained = row.unlocked_count // ROUND_SIZE
-        row.unlocked_count = row.unlocked_count % ROUND_SIZE
-        row.coins += coins_gained
-        row.slot_order = _make_slot_order()
+
+    if log.encounter_tier == "normal":
+        # 野生：收進野生圖鑑（依 species_id 去重，已擁有則略過不重複加）
+        species_id = WILD_POOL_IDS[log.pokemon_index]
+        wild = json.loads(row.wild_collection) if row.wild_collection else []
+        if not any(w["species_id"] == species_id for w in wild):
+            wild.append({"species_id": species_id, "mega": False})
+            row.wild_collection = json.dumps(wild)
+    else:
+        # 傳說：填格、滿一輪換金幣並重洗
+        row.unlocked_count += 1
+        if row.unlocked_count >= ROUND_SIZE:
+            coins_gained = row.unlocked_count // ROUND_SIZE
+            row.unlocked_count = row.unlocked_count % ROUND_SIZE
+            row.coins += coins_gained
+            row.slot_order = _make_slot_order()
 
     db.commit()
     db.refresh(row)
@@ -410,6 +450,31 @@ def redeem_courage_band(db: Session = Depends(get_db)) -> CollectionStateOut:
     return _state_to_out(row)
 
 
+@app.post("/api/wild/megamax", response_model=CollectionStateOut)
+def megamax_wild(payload: WildMegamaxIn, db: Session = Depends(get_db)) -> CollectionStateOut:
+    """對一隻已擁有的野生寶可夢極巨化：消耗 1 條極巨腕帶，將該筆 mega 設為 True。"""
+    row = db.get(CollectionState, 1)
+    if row is None:
+        raise HTTPException(status_code=404, detail="尚無收集狀態")
+    bands = row.courage_bands if row.courage_bands is not None else 0
+    if bands < 1:
+        raise HTTPException(status_code=422, detail="沒有極巨腕帶，無法極巨化")
+
+    wild = json.loads(row.wild_collection) if row.wild_collection else []
+    entry = next((w for w in wild if w["species_id"] == payload.species_id), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="尚未擁有這隻野生寶可夢")
+    if entry.get("mega"):
+        raise HTTPException(status_code=409, detail="這隻已經極巨化過了")
+
+    entry["mega"] = True
+    row.wild_collection = json.dumps(wild)
+    row.courage_bands = bands - 1
+    db.commit()
+    db.refresh(row)
+    return _state_to_out(row)
+
+
 @app.post("/api/collection-state/reset", status_code=204)
 def reset_collection_state(db: Session = Depends(get_db)) -> None:
     db.execute(text("DELETE FROM honor_entries"))
@@ -424,6 +489,7 @@ def reset_collection_state(db: Session = Depends(get_db)) -> None:
     row.unlocked_count = 0
     row.coins = 0
     row.courage_bands = 0
+    row.wild_collection = "[]"
     row.slot_order = _make_slot_order()  # 重置時產生新隨機排列
     db.commit()
 

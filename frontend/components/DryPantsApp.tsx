@@ -32,6 +32,7 @@ import {
   fetchErrorRecords,
   fetchHonorEntries,
   fetchTodayPatrolLog,
+  megamaxWild,
   redeemCourageBand,
   resetCollectionState,
   saveCollectionState,
@@ -40,6 +41,7 @@ import {
   type ErrorReasonDTO,
   type ErrorRecordDTO,
   type PatrolLogDTO,
+  type WildEntryDTO,
 } from "@/lib/api";
 
 type Mode = "collection" | "analysis";
@@ -107,7 +109,8 @@ const POKEBALL_IMG =
 const LUCKY_EGG_IMG =
   "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/lucky-egg.png";
 
-// 完整傳說池（94 隻：71 is_legendary + 23 is_mythical，Gen 1–9 全收）；每輪從中隨機取 ROUND_SIZE 隻
+// 傳說池（92 隻：70 is_legendary + 22 is_mythical，Gen 1–9）；每輪隨機取 ROUND_SIZE 隻。
+// 註：武道熊師(892)、美錄梅塔(809) 雖官方為傳說/幻獸，但有 Gmax 型態→移至 WILD_POOL（可巨大化）。
 const LEGENDARY_POOL = [
   // Gen 1 — 4 legendary + 1 mythical
   { id: 144, name: "急凍鳥" },
@@ -185,13 +188,13 @@ const LEGENDARY_POOL = [
   { id: 802, name: "瑪夏多" },
   { id: 807, name: "澤拉歐拉" },
   { id: 808, name: "美錄坦" },
-  { id: 809, name: "美錄梅塔" },
-  // Gen 8 — 11 legendary + 1 mythical
+  // 809 美錄梅塔 → WILD_POOL（有 Gmax）
+  // Gen 8 — 10 legendary + 1 mythical（原 11 legendary，武道熊師移至 WILD_POOL）
   { id: 888, name: "蒼響" },
   { id: 889, name: "藏瑪然特" },
   { id: 890, name: "無極汰那" },
   { id: 891, name: "熊徒弟" },
-  { id: 892, name: "拳王熊" },
+  // 892 武道熊師(拳王熊) → WILD_POOL（有 Gmax）
   { id: 893, name: "薩路德" },
   { id: 894, name: "雷吉電彼" },
   { id: 895, name: "雷吉龍" },
@@ -213,6 +216,59 @@ const LEGENDARY_POOL = [
   { id: 1024, name: "達帕戈斯" },
   { id: 1025, name: "皮查路特" },
 ];
+
+// 野生圖鑑（30 隻有 Gmax 型態，可用極巨腕帶巨大化）。
+// ⚠️ 陣列順序須與後端 WILD_POOL_IDS 完全一致（pokemon_index 兩邊共用）。
+const wildArt = (id: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+const WILD_POOL = [
+  // 國民級 12
+  { species_id: 3, zh: "妙蛙花", en: "venusaur", sprite_url: wildArt(3), gmax_url: wildArt(10195) },
+  { species_id: 6, zh: "噴火龍", en: "charizard", sprite_url: wildArt(6), gmax_url: wildArt(10196) },
+  { species_id: 9, zh: "水箭龜", en: "blastoise", sprite_url: wildArt(9), gmax_url: wildArt(10197) },
+  { species_id: 12, zh: "巴大蝶", en: "butterfree", sprite_url: wildArt(12), gmax_url: wildArt(10198) },
+  { species_id: 25, zh: "皮卡丘", en: "pikachu", sprite_url: wildArt(25), gmax_url: wildArt(10199) },
+  { species_id: 52, zh: "喵喵", en: "meowth", sprite_url: wildArt(52), gmax_url: wildArt(10200) },
+  { species_id: 68, zh: "怪力", en: "machamp", sprite_url: wildArt(68), gmax_url: wildArt(10201) },
+  { species_id: 94, zh: "耿鬼", en: "gengar", sprite_url: wildArt(94), gmax_url: wildArt(10202) },
+  { species_id: 99, zh: "巨鉗蟹", en: "kingler", sprite_url: wildArt(99), gmax_url: wildArt(10203) },
+  { species_id: 131, zh: "拉普拉斯", en: "lapras", sprite_url: wildArt(131), gmax_url: wildArt(10204) },
+  { species_id: 133, zh: "伊布", en: "eevee", sprite_url: wildArt(133), gmax_url: wildArt(10205) },
+  { species_id: 143, zh: "卡比獸", en: "snorlax", sprite_url: wildArt(143), gmax_url: wildArt(10206) },
+  // 中段 8
+  { species_id: 812, zh: "轟擂金剛猩", en: "rillaboom", sprite_url: wildArt(812), gmax_url: wildArt(10209) },
+  { species_id: 815, zh: "閃焰王牌", en: "cinderace", sprite_url: wildArt(815), gmax_url: wildArt(10210) },
+  { species_id: 818, zh: "千面避役", en: "inteleon", sprite_url: wildArt(818), gmax_url: wildArt(10211) },
+  { species_id: 823, zh: "鋼鎧鴉", en: "corviknight", sprite_url: wildArt(823), gmax_url: wildArt(10212) },
+  { species_id: 869, zh: "霜奶仙", en: "alcremie", sprite_url: wildArt(869), gmax_url: wildArt(10223) },
+  { species_id: 892, zh: "武道熊師", en: "urshifu", sprite_url: wildArt(892), gmax_url: wildArt(10226) },
+  { species_id: 809, zh: "美錄梅塔", en: "melmetal", sprite_url: wildArt(809), gmax_url: wildArt(10208) },
+  { species_id: 569, zh: "灰塵山", en: "garbodor", sprite_url: wildArt(569), gmax_url: wildArt(10207) },
+  // 中後段 10
+  { species_id: 834, zh: "暴噬龜", en: "drednaw", sprite_url: wildArt(834), gmax_url: wildArt(10214) },
+  { species_id: 839, zh: "巨炭山", en: "coalossal", sprite_url: wildArt(839), gmax_url: wildArt(10215) },
+  { species_id: 841, zh: "蘋裹龍", en: "flapple", sprite_url: wildArt(841), gmax_url: wildArt(10216) },
+  { species_id: 842, zh: "豐蜜龍", en: "appletun", sprite_url: wildArt(842), gmax_url: wildArt(10217) },
+  { species_id: 844, zh: "沙螺蟒", en: "sandaconda", sprite_url: wildArt(844), gmax_url: wildArt(10218) },
+  { species_id: 849, zh: "顫弦蠑螈", en: "toxtricity", sprite_url: wildArt(849), gmax_url: wildArt(10219) },
+  { species_id: 851, zh: "焚焰蚣", en: "centiskorch", sprite_url: wildArt(851), gmax_url: wildArt(10220) },
+  { species_id: 858, zh: "布莉姆溫", en: "hatterene", sprite_url: wildArt(858), gmax_url: wildArt(10221) },
+  { species_id: 861, zh: "長毛巨魔", en: "grimmsnarl", sprite_url: wildArt(861), gmax_url: wildArt(10222) },
+  { species_id: 879, zh: "大王銅象", en: "copperajah", sprite_url: wildArt(879), gmax_url: wildArt(10224) },
+];
+
+// 依遭遇等級取出該 index 對應的寶可夢（normal→野生池、其餘→傳說池）
+function encounterPoke(
+  tier: string | null | undefined,
+  index: number,
+): { id: number; name: string } | null {
+  if (tier === "normal") {
+    const w = WILD_POOL[index];
+    return w ? { id: w.species_id, name: w.zh } : null;
+  }
+  const l = LEGENDARY_POOL[index];
+  return l ? { id: l.id, name: l.name } : null;
+}
 
 /** 每輪從完整池隨機抽取的數量 */
 const ROUND_SIZE = 30;
@@ -462,6 +518,10 @@ export function DryPantsApp() {
   const [courageTotal, setCourageTotal] = useState(0);
   const [courageBands, setCourageBands] = useState(0);
   const [redeemingBand, setRedeemingBand] = useState(false);
+  const [dexTab, setDexTab] = useState<"legendary" | "wild">("legendary");
+  const [wildCollection, setWildCollection] = useState<WildEntryDTO[]>([]);
+  const [megamaxing, setMegamaxing] = useState(false);
+  const [confirmMega, setConfirmMega] = useState<number | null>(null); // species_id 待確認
 
   const stateLoaded = useRef(false);
   const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -476,6 +536,7 @@ export function DryPantsApp() {
         setCoins(state.coins);
         setSlotOrder(state.slot_order);
         setCourageBands(state.courage_bands ?? 0);
+        setWildCollection(state.wild_collection ?? []);
         setHonorEntries(
           entries.map((e) => ({ time: e.entry_time, text: e.entry_text }))
         );
@@ -483,7 +544,11 @@ export function DryPantsApp() {
         setCourageTotal(courage);
         stateLoaded.current = true; // 只在成功後才允許 auto-save，避免以預設值覆寫 DB
       })
-      .catch(() => {}); // 載入失敗：維持預設值但不觸發儲存
+      .catch(() => {
+        // 載入失敗：維持預設值但不觸發儲存；提示使用者（後端冷啟動時稍等重整即可）
+        showMsg("⚠️ 連線後端失敗，顯示的是預設狀態。稍等幾秒重新整理看看～", 6000);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 狀態變更時自動儲存到後端（跳過初次載入前的預設值，debounce 避免連點時頻繁請求）
@@ -600,7 +665,7 @@ export function DryPantsApp() {
       // 今日新增的「有說」即時累加進勇氣印章總計（否則進度條要重整才更新）
       setCourageTotal((prev) => prev + (result.courage_stamps ?? 0));
       if (result.encounter_tier && result.encounter_tier !== "none" && result.pokemon_index !== null) {
-        const poke = LEGENDARY_POOL[result.pokemon_index];
+        const poke = encounterPoke(result.encounter_tier, result.pokemon_index);
         if (poke) {
           router.push(`/encounter?tier=${result.encounter_tier}&pokemonId=${poke.id}&pokemonName=${encodeURIComponent(poke.name)}`);
           return;
@@ -844,20 +909,145 @@ export function DryPantsApp() {
           {mode === "collection" ? (
             <>
               <section className="rounded-3xl bg-white p-4 shadow-md">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-sm font-black text-slate-800">
-                    🏆 傳說寶可夢 ({unlockedCount}/{ROUND_SIZE})
-                  </h2>
-                  <span className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-900 ring-2 ring-violet-400">
-                    <img src={LUCKY_EGG_IMG} alt="扭蛋幣" className="h-4 w-4" />
-                    x {coins}
-                  </span>
+                {/* 子頁籤：傳說圖鑑 / 野生圖鑑 */}
+                <div className="mb-3 flex gap-1.5 rounded-full bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setDexTab("legendary")}
+                    className={`flex-1 rounded-full py-1.5 text-xs font-black transition ${
+                      dexTab === "legendary" ? "bg-violet-600 text-white shadow" : "text-slate-500"
+                    }`}
+                  >
+                    🏆 傳說圖鑑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDexTab("wild")}
+                    className={`flex-1 rounded-full py-1.5 text-xs font-black transition ${
+                      dexTab === "wild" ? "bg-lime-600 text-white shadow" : "text-slate-500"
+                    }`}
+                  >
+                    🌿 野生圖鑑
+                  </button>
                 </div>
-                <div className="grid grid-cols-6 gap-1.5">
-                  {slotOrder.map((poolIndex, i) => (
-                    <PokeTile key={poolIndex} index={poolIndex} unlocked={i < unlockedCount} />
-                  ))}
-                </div>
+
+                {dexTab === "legendary" ? (
+                  <>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h2 className="text-sm font-black text-slate-800">
+                        🏆 傳說寶可夢 ({unlockedCount}/{ROUND_SIZE})
+                      </h2>
+                      <span className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-900 ring-2 ring-violet-400">
+                        <img src={LUCKY_EGG_IMG} alt="扭蛋幣" className="h-4 w-4" />
+                        x {coins}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {slotOrder.map((poolIndex, i) => (
+                        <PokeTile key={poolIndex} index={poolIndex} unlocked={i < unlockedCount} />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* 野生圖鑑 */}
+                    <div className="mb-3 flex items-center justify-between">
+                      <h2 className="text-sm font-black text-slate-800">
+                        🌿 野生寶可夢 ({wildCollection.length}/{WILD_POOL.length})
+                      </h2>
+                      <span className="flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-bold text-yellow-900 ring-2 ring-yellow-400">
+                        ⚡ 極巨腕帶 x {courageBands}
+                      </span>
+                    </div>
+                    <p className="mb-2 text-[11px] text-slate-400">
+                      點亮的野生寶可夢可用 ⚡ 極巨腕帶巨大化！
+                    </p>
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {WILD_POOL.map((p) => {
+                        const owned = wildCollection.find((w) => w.species_id === p.species_id);
+                        const isMega = !!owned?.mega;
+                        const canMega = !!owned && !isMega && courageBands > 0;
+                        return (
+                          <button
+                            type="button"
+                            key={p.species_id}
+                            disabled={!canMega}
+                            onClick={() => canMega && setConfirmMega(p.species_id)}
+                            title={owned ? p.zh : "尚未收服"}
+                            className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-xl border-2 transition ${
+                              isMega
+                                ? "border-amber-400 bg-gradient-to-br from-amber-100 to-orange-200 shadow-[0_0_12px_rgba(255,180,40,0.9)]"
+                                : owned
+                                  ? "border-lime-300 bg-lime-50"
+                                  : "border-slate-200 bg-slate-100"
+                            } ${canMega ? "cursor-pointer hover:ring-2 hover:ring-amber-400 active:scale-95" : "cursor-default"}`}
+                          >
+                            <img
+                              src={isMega ? p.gmax_url : p.sprite_url}
+                              alt={p.zh}
+                              loading="lazy"
+                              className={`h-[88%] w-[88%] object-contain ${owned ? "" : "opacity-25 grayscale"}`}
+                            />
+                            {isMega && (
+                              <span className="absolute right-0 top-0 rounded-bl-md bg-amber-500 px-1 text-[8px] font-black text-white">
+                                ⚡MAX
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 極巨化確認面板 */}
+                    {confirmMega !== null &&
+                      (() => {
+                        const p = WILD_POOL.find((w) => w.species_id === confirmMega);
+                        if (!p) return null;
+                        return (
+                          <div className="mt-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-center">
+                            <p className="text-sm font-black text-amber-800">
+                              對 {p.zh} 使用極巨腕帶巨大化？
+                            </p>
+                            <p className="mt-0.5 text-xs text-amber-600">
+                              消耗 1 條 ⚡（目前持有 {courageBands} 條），無法還原
+                            </p>
+                            <div className="mt-2 flex justify-center gap-2">
+                              <button
+                                type="button"
+                                disabled={megamaxing}
+                                onClick={async () => {
+                                  if (megamaxing) return;
+                                  setMegamaxing(true);
+                                  try {
+                                    const updated = await megamaxWild(p.species_id);
+                                    setWildCollection(updated.wild_collection ?? []);
+                                    setCourageBands(updated.courage_bands ?? 0);
+                                    showMsg(`⚡ ${p.zh} 極巨化成功！超級巨大！`, 4000);
+                                  } catch {
+                                    showMsg("❌ 極巨化失敗，請稍後再試");
+                                  } finally {
+                                    setMegamaxing(false);
+                                    setConfirmMega(null);
+                                  }
+                                }}
+                                className="rounded-full bg-amber-500 px-5 py-2.5 text-sm font-bold text-white shadow active:scale-95 disabled:opacity-60"
+                              >
+                                {megamaxing ? "巨大化中…" : "⚡ 確定巨大化"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={megamaxing}
+                                onClick={() => setConfirmMega(null)}
+                                className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-slate-600 ring-1 ring-slate-300 active:scale-95"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                  </>
+                )}
 
                 <div className="mt-5">
                   <div className="mb-2 flex items-center justify-between text-sm font-black text-slate-800">
@@ -968,7 +1158,7 @@ export function DryPantsApp() {
                     <button
                       type="button"
                       onClick={() => {
-                        const poke = LEGENDARY_POOL[todayLog.pokemon_index!];
+                        const poke = encounterPoke(todayLog.encounter_tier, todayLog.pokemon_index!);
                         if (poke) {
                           router.push(`/encounter?tier=${todayLog.encounter_tier}&pokemonId=${poke.id}&pokemonName=${encodeURIComponent(poke.name)}`);
                         }
@@ -1397,7 +1587,14 @@ export function DryPantsApp() {
             onClick={async () => {
               if (!window.confirm("確定要重置所有進度？此操作無法還原。")) return;
               stateLoaded.current = false;
-              await resetCollectionState().catch(() => {});
+              try {
+                // 非樂觀更新：後端確定重置成功才清畫面，失敗則保留原狀並提示
+                await resetCollectionState();
+              } catch {
+                stateLoaded.current = true;
+                showMsg("❌ 重置失敗，請檢查網路後再試", 4000);
+                return;
+              }
               // 重新取得後端產生的新 slot_order
               const fresh = await fetchCollectionState().catch(() => null);
               setEnergy(0);
@@ -1407,6 +1604,7 @@ export function DryPantsApp() {
               setTodayLog(null);        // 清掉今日巡邏 → 可立即重新測試巡邏
               setCourageTotal(0);       // 勇氣印章歸零
               setCourageBands(0);
+              setWildCollection([]);    // 野生圖鑑清空
               if (fresh) setSlotOrder(fresh.slot_order);
               stateLoaded.current = true;
               showMsg("🔄 已重置所有進度");
