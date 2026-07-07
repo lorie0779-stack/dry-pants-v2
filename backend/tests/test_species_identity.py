@@ -177,3 +177,55 @@ def test_pool_constants_in_sync() -> None:
     """後端 LEGENDARY_POOL_IDS 長度 == FULL_POOL_SIZE 且無重複（與前端同步的前提）。"""
     assert len(LEGENDARY_POOL_IDS) == FULL_POOL_SIZE
     assert len(set(LEGENDARY_POOL_IDS)) == FULL_POOL_SIZE
+
+
+def test_pool_matches_shared_fixture() -> None:
+    """LEGENDARY_POOL_IDS 與 shared/legendary_pool_ids.json 逐項一致。
+
+    前端 jest 有對稱測試比對同一份 fixture——內容漂移（換隻、調序）在 CI 就抓到，
+    不會等到錯誤身分寫進 DB。
+    """
+    import os
+    fixture_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "shared", "legendary_pool_ids.json"
+    )
+    with open(fixture_path) as f:
+        shared = json.load(f)
+    assert shared == list(LEGENDARY_POOL_IDS)
+
+
+# ── 不變式自癒（count 與清單長度漂移的常駐修復）──────────────────────────────
+
+def test_heal_count_gt_species_extends_from_slot_order(client: TestClient) -> None:
+    """count > len(species)（舊快取前端只加計數）→ 以 slot_order 對應位置補身分。"""
+    order = list(range(30))
+    _seed_state(unlocked_count=4, slot_order=order,
+                unlocked_species=[LEGENDARY_POOL_IDS[0], LEGENDARY_POOL_IDS[1]])
+
+    data = client.get("/api/collection-state").json()
+    assert data["unlocked_species"] == [LEGENDARY_POOL_IDS[i] for i in range(4)]
+    assert data["unlocked_count"] == 4
+    # 已持久化（再 GET 一次不變）
+    assert client.get("/api/collection-state").json()["unlocked_count"] == 4
+
+
+def test_heal_count_lt_species_uses_list_length(client: TestClient) -> None:
+    """count < len(species) → 清單是真相，count 修正為清單長度。"""
+    captured = [LEGENDARY_POOL_IDS[0], LEGENDARY_POOL_IDS[1], LEGENDARY_POOL_IDS[2]]
+    _seed_state(unlocked_count=1, slot_order=list(range(30)), unlocked_species=captured)
+
+    data = client.get("/api/collection-state").json()
+    assert data["unlocked_count"] == 3
+    assert data["unlocked_species"] == captured
+
+
+def test_put_with_species_binds_count_to_list_length(client: TestClient) -> None:
+    """PUT 帶身分清單時，count 以清單長度為準（忽略 payload 的計數）。"""
+    _seed_state(unlocked_count=0, slot_order=list(range(30)), unlocked_species=[])
+    res = client.put("/api/collection-state", json={
+        "energy": 0, "unlocked_count": 7, "coins": 0,
+        "slot_order": list(range(30)),
+        "unlocked_species": [LEGENDARY_POOL_IDS[0], LEGENDARY_POOL_IDS[1]],
+    })
+    assert res.status_code == 200, res.text
+    assert res.json()["unlocked_count"] == 2

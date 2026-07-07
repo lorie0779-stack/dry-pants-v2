@@ -111,7 +111,9 @@ const LUCKY_EGG_IMG =
 
 // 傳說池（92 隻：70 is_legendary + 22 is_mythical，Gen 1–9）；每輪隨機取 ROUND_SIZE 隻。
 // 註：武道熊師(892)、美錄梅塔(809) 雖官方為傳說/幻獸，但有 Gmax 型態→移至 WILD_POOL（可巨大化）。
-const LEGENDARY_POOL = [
+// ⚠️ id 順序須與後端 LEGENDARY_POOL_IDS 及 shared/legendary_pool_ids.json 完全一致
+//（CI 有比對測試；export 供同步測試 import）。
+export const LEGENDARY_POOL = [
   // Gen 1 — 4 legendary + 1 mythical
   { id: 144, name: "急凍鳥" },
   { id: 145, name: "閃電鳥" },
@@ -529,6 +531,9 @@ export function DryPantsApp() {
   const [confirmMega, setConfirmMega] = useState<number | null>(null); // species_id 待確認
 
   const stateLoaded = useRef(false);
+  // 只有本地路徑（能量兌換）改過身分清單才隨 auto-save 上傳，避免陳舊分頁
+  // 的整包覆寫洗掉後端 claim 剛寫入的身分（後端「未帶則保留」接住）
+  const speciesDirty = useRef(false);
   const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -567,7 +572,7 @@ export function DryPantsApp() {
         unlocked_count: unlockedCount,
         coins,
         slot_order: slotOrder,
-        unlocked_species: unlockedSpecies,
+        ...(speciesDirty.current ? { unlocked_species: unlockedSpecies } : {}),
       }).catch(() => {});
     }, 600);
     return () => {
@@ -592,6 +597,7 @@ export function DryPantsApp() {
       setUnlockedCount(remainder);
       setSlotOrder(newOrder);
       // 身分制：新一輪的餘格身分取自新排列前綴
+      speciesDirty.current = true;
       setUnlockedSpecies(
         newOrder.slice(0, remainder).map((i) => LEGENDARY_POOL[i].id)
       );
@@ -600,6 +606,7 @@ export function DryPantsApp() {
     } else {
       setUnlockedCount(newTotal);
       // 身分制：把本次解鎖格（slot_order 位置 unlockedCount..newTotal）的物種記入清單
+      speciesDirty.current = true;
       setUnlockedSpecies((prev) => [
         ...prev,
         ...slotOrder
