@@ -59,8 +59,13 @@ LEGENDARY_POOL_IDS = [
     1001, 1002, 1003, 1004, 1005, 1006, 1014, 1015, 1016, 1017, 1024, 1025,
 ]
 LEGENDARY_ID_SET = set(LEGENDARY_POOL_IDS)
-# 兩邊常數失步時直接開機失敗，好過上線後靜默錯位
-assert len(LEGENDARY_POOL_IDS) == FULL_POOL_SIZE
+# 兩邊常數失步時直接開機失敗，好過上線後靜默錯位（CI 另有 fixture 比對測試當第一道防線）
+if len(LEGENDARY_POOL_IDS) != FULL_POOL_SIZE or len(LEGENDARY_ID_SET) != FULL_POOL_SIZE:
+    raise RuntimeError(
+        f"LEGENDARY_POOL_IDS 共 {len(LEGENDARY_POOL_IDS)} 筆（去重 {len(LEGENDARY_ID_SET)}），"
+        f"應為 {FULL_POOL_SIZE}——與前端 LEGENDARY_POOL 失步，"
+        "請同步 shared/legendary_pool_ids.json 與兩邊常數後再啟動"
+    )
 
 
 def _make_slot_order(exclude_species: list[int] | None = None) -> str:
@@ -307,6 +312,22 @@ def get_collection_state(db: Session = Depends(get_db)) -> CollectionStateOut:
         row.unlocked_species = "[]"
         changed = True
 
+    # 不變式自癒（常駐，不只 migration 一次）：count 是清單的衍生值。
+    # count > len：舊快取前端的能量兌換只加計數不加身分 → 以 slot_order 對應
+    # 位置補齊身分（與回填同一語意）；count < len 或補不齊 → 以清單長度為準。
+    species = json.loads(row.unlocked_species)
+    count = max(row.unlocked_count or 0, 0)
+    if count > len(species) and row.slot_order:
+        order = json.loads(row.slot_order)
+        for pos in range(len(species), min(count, len(order))):
+            if 0 <= order[pos] < FULL_POOL_SIZE:
+                species.append(LEGENDARY_POOL_IDS[order[pos]])
+        row.unlocked_species = json.dumps(species)
+        changed = True
+    if row.unlocked_count != len(species):
+        row.unlocked_count = len(species)
+        changed = True
+
     if changed:
         db.commit()
         db.refresh(row)
@@ -331,6 +352,8 @@ def save_collection_state(
         if invalid:
             raise HTTPException(status_code=422, detail=f"未知的傳說 species_id：{invalid}")
         row.unlocked_species = json.dumps(payload.unlocked_species)
+        # 不變式：count 永遠等於清單長度（帶了清單就以清單為準，忽略 payload 計數）
+        row.unlocked_count = len(payload.unlocked_species)
     db.commit()
     db.refresh(row)
     return _state_to_out(row)
