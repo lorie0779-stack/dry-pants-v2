@@ -95,6 +95,7 @@ class CollectionStateOut(BaseModel):
     slot_order: list[int]
     courage_bands: int = 0
     wild_collection: list[WildEntry] = []
+    unlocked_species: list[int] = []
 
     model_config = {"from_attributes": True}
 
@@ -104,6 +105,11 @@ class CollectionStateIn(BaseModel):
     unlocked_count: int = Field(..., ge=0, description="已解鎖傳說數，不可為負")
     coins: int = Field(..., ge=0, description="扭蛋幣，不可為負")
     slot_order: list[int]
+    unlocked_species: list[int] | None = Field(
+        default=None,
+        description="本輪已捕獲傳說 species_id（能量兌換路徑由前端計算後回寫）；"
+        "未帶（舊客戶端）則後端保留現值",
+    )
 
 
 BlockResult = Literal["clean", "accident_told", "accident_silent"]

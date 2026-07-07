@@ -17,6 +17,9 @@ class CollectionState(Base):
     courage_bands: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # 野生圖鑑：JSON 陣列，每筆 {"species_id": int, "mega": bool}。預設 "[]"。
     wild_collection: Mapped[str | None] = mapped_column(String(2048), nullable=True, default=None)
+    # 傳說圖鑑（物種身分制）：JSON int 陣列，本輪已捕獲的 species_id，順序＝捕獲順序。
+    # NULL＝尚未回填的舊資料（GET /api/collection-state 時會自動回填）。
+    unlocked_species: Mapped[str | None] = mapped_column(String(512), nullable=True, default=None)
 
 
 class PatrolLog(Base):

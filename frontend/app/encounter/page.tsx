@@ -88,6 +88,8 @@ function EncounterScreen() {
   const [confirmRelease, setConfirmRelease] = useState(false);
   const [pokemon, setPokemon] = useState(DEMO_POOL[0]);
   const [rockCount, setRockCount] = useState(0);
+  // 圖源備援：home sprite 載入失敗（GitHub raw 偶發慢/斷）時退到 official-artwork
+  const [spriteFallback, setSpriteFallback] = useState(false);
 
   useEffect(() => {
     if (paramId && paramName) {
@@ -96,6 +98,12 @@ function EncounterScreen() {
       setPokemon(DEMO_POOL[Math.floor(Math.random() * DEMO_POOL.length)]);
     }
   }, [paramId, paramName]);
+
+  // 預載：img 要到揭曉才掛載，先在搖球期間就開始下載，避免揭曉時圖還沒到＝空白
+  useEffect(() => {
+    const pre = new Image();
+    pre.src = `${SPRITE_BASE}/${pokemon.id}.png`;
+  }, [pokemon.id]);
 
   // 搖晃 3 次後進入 ready，每次間隔 1s
   useEffect(() => {
@@ -113,7 +121,9 @@ function EncounterScreen() {
     setTimeout(() => setPhase('revealed'), 600);
   };
 
-  const spriteUrl = `${SPRITE_BASE}/${pokemon.id}.png`;
+  const spriteUrl = spriteFallback
+    ? `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokemon.id}.png`
+    : `${SPRITE_BASE}/${pokemon.id}.png`;
   const isRevealed = phase === 'revealed';
 
   return (
@@ -206,6 +216,9 @@ function EncounterScreen() {
             width={200}
             height={200}
             className="object-contain"
+            onError={() => {
+              if (!spriteFallback) setSpriteFallback(true);
+            }}
             style={{
               animation: 'revealPop 0.5s ease-out both, floatY 3s ease-in-out infinite 0.6s',
             }}
