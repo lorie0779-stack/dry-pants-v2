@@ -76,6 +76,9 @@ export type CollectionStateDTO = {
   slot_order: number[];
   courage_bands?: number;
   wild_collection?: WildEntryDTO[];
+  // 傳說圖鑑身分制：本輪已捕獲的 species_id（順序＝捕獲順序）。
+  // 圖鑑已解鎖格以此為準，不再由 slot_order 位置推算。
+  unlocked_species?: number[];
 };
 
 export type HonorEntryDTO = {

@@ -51,6 +51,8 @@ const NONZERO_STATE = {
   slot_order: Array.from({ length: 30 }, (_, i) => i),
   courage_bands: 2,
   wild_collection: [],
+  // 身分制：計數顯示以此清單長度為準（12 隻 = slot_order 前 12 格的物種）
+  unlocked_species: [144, 145, 146, 150, 151, 243, 244, 245, 249, 250, 251, 377],
 };
 
 describe("DryPantsApp 重置按鈕：非樂觀更新", () => {

@@ -37,10 +37,45 @@ WILD_POOL_IDS = [
     834, 839, 841, 842, 844, 849, 851, 858, 861, 879,      # 中後段 10
 ]
 
+# 傳說池 species_id（92 隻），順序須與前端 DryPantsApp.tsx 的 LEGENDARY_POOL 完全一致
+# （slot_order / pokemon_index 都是指進這張表的索引）。改動時兩邊一起改。
+LEGENDARY_POOL_IDS = [
+    # Gen 1–2
+    144, 145, 146, 150, 151,
+    243, 244, 245, 249, 250, 251,
+    # Gen 3
+    377, 378, 379, 380, 381, 382, 383, 384, 385, 386,
+    # Gen 4
+    480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493,
+    # Gen 5
+    494, 638, 639, 640, 641, 642, 643, 644, 645, 646, 647, 648, 649,
+    # Gen 6
+    716, 717, 718, 719, 720, 721,
+    # Gen 7
+    772, 773, 785, 786, 787, 788, 789, 790, 791, 792, 800, 801, 802, 807, 808,
+    # Gen 8（892 武道熊師、809 美錄梅塔已歸野生池）
+    888, 889, 890, 891, 893, 894, 895, 896, 897, 898, 905,
+    # Gen 9
+    1001, 1002, 1003, 1004, 1005, 1006, 1014, 1015, 1016, 1017, 1024, 1025,
+]
+LEGENDARY_ID_SET = set(LEGENDARY_POOL_IDS)
+# 兩邊常數失步時直接開機失敗，好過上線後靜默錯位
+assert len(LEGENDARY_POOL_IDS) == FULL_POOL_SIZE
 
-def _make_slot_order() -> str:
-    """從 FULL_POOL_SIZE 中隨機抽取 ROUND_SIZE 個不重複索引"""
-    return json.dumps(random.sample(range(FULL_POOL_SIZE), ROUND_SIZE))
+
+def _make_slot_order(exclude_species: list[int] | None = None) -> str:
+    """從 FULL_POOL_SIZE 中隨機抽取 ROUND_SIZE 個不重複索引。
+
+    exclude_species：已捕獲的 species_id 清單。自癒重洗時傳入，避免新排列
+    再抽到本輪已捕獲的物種（同輪重複）。排除後不足一輪則退回全池。
+    """
+    candidates = list(range(FULL_POOL_SIZE))
+    if exclude_species:
+        excluded = set(exclude_species)
+        filtered = [i for i in candidates if LEGENDARY_POOL_IDS[i] not in excluded]
+        if len(filtered) >= ROUND_SIZE:
+            candidates = filtered
+    return json.dumps(random.sample(candidates, ROUND_SIZE))
 
 
 DEFAULT_REASON_SEEDS = [
@@ -108,6 +143,14 @@ def init_db() -> None:
     with engine.connect() as conn:
         try:
             conn.execute(text("ALTER TABLE collection_state ADD COLUMN wild_collection VARCHAR(2048)"))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
+    # Migration: add unlocked_species column to collection_state（傳說圖鑑身分制）
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE collection_state ADD COLUMN unlocked_species VARCHAR(512)"))
             conn.commit()
         except Exception:
             pass  # column already exists
@@ -219,6 +262,7 @@ def _state_to_out(row: CollectionState) -> CollectionStateOut:
         slot_order=json.loads(row.slot_order) if row.slot_order else list(range(ROUND_SIZE)),
         courage_bands=row.courage_bands if row.courage_bands is not None else 0,
         wild_collection=json.loads(row.wild_collection) if row.wild_collection else [],
+        unlocked_species=json.loads(row.unlocked_species) if row.unlocked_species else [],
     )
 
 
@@ -226,21 +270,46 @@ def _state_to_out(row: CollectionState) -> CollectionStateOut:
 def get_collection_state(db: Session = Depends(get_db)) -> CollectionStateOut:
     row = db.get(CollectionState, 1)
     if row is None:
-        row = CollectionState(id=1, energy=0, unlocked_count=0, coins=0, slot_order=_make_slot_order())
+        row = CollectionState(
+            id=1, energy=0, unlocked_count=0, coins=0,
+            slot_order=_make_slot_order(), unlocked_species="[]",
+        )
         db.add(row)
         db.commit()
         db.refresh(row)
-    elif row.slot_order is None:
+        return _state_to_out(row)
+
+    changed = False
+    if row.slot_order is None:
         row.slot_order = _make_slot_order()
-        db.commit()
-        db.refresh(row)
-    else:
+        changed = True
+    elif row.unlocked_species is None:
+        # 回填（身分制 migration）：舊資料只有位置計數，以「當下」slot_order 前綴
+        # 映射成物種身分清單（承認現況為既成事實）。越界索引（舊 94 池殘留）
+        # 無法映射則跳過，計數同步縮小以維持 count == len(species) 不變式。
+        order = json.loads(row.slot_order)
+        prefix = order[: max(row.unlocked_count or 0, 0)]
+        species = [LEGENDARY_POOL_IDS[i] for i in prefix if 0 <= i < FULL_POOL_SIZE]
+        row.unlocked_species = json.dumps(species)
+        row.unlocked_count = len(species)
+        changed = True
+
+    if row.slot_order is not None:
         # 自癒：舊 slot_order 可能含已縮小的池越界 index（94→92 後的 92/93），重洗。
+        # 已解鎖格的身分存在 unlocked_species，不受重洗影響；重洗時排除已捕獲物種
+        # 避免同輪重複。
         existing = json.loads(row.slot_order)
         if any(i >= FULL_POOL_SIZE for i in existing) or len(existing) != ROUND_SIZE:
-            row.slot_order = _make_slot_order()
-            db.commit()
-            db.refresh(row)
+            captured = json.loads(row.unlocked_species) if row.unlocked_species else []
+            row.slot_order = _make_slot_order(exclude_species=captured)
+            changed = True
+    if row.unlocked_species is None:
+        row.unlocked_species = "[]"
+        changed = True
+
+    if changed:
+        db.commit()
+        db.refresh(row)
     return _state_to_out(row)
 
 
@@ -256,6 +325,12 @@ def save_collection_state(
     row.unlocked_count = payload.unlocked_count
     row.coins = payload.coins
     row.slot_order = json.dumps(payload.slot_order)
+    if payload.unlocked_species is not None:
+        # 身分制：前端能量兌換路徑會帶完整清單；舊客戶端未帶則保留現值。
+        invalid = [s for s in payload.unlocked_species if s not in LEGENDARY_ID_SET]
+        if invalid:
+            raise HTTPException(status_code=422, detail=f"未知的傳說 species_id：{invalid}")
+        row.unlocked_species = json.dumps(payload.unlocked_species)
     db.commit()
     db.refresh(row)
     return _state_to_out(row)
@@ -388,13 +463,18 @@ def claim_patrol_encounter(db: Session = Depends(get_db)) -> CollectionStateOut:
             wild.append({"species_id": species_id, "mega": False})
             row.wild_collection = json.dumps(wild)
     else:
-        # 傳說：填格、滿一輪換金幣並重洗
+        # 傳說：記錄物種身分＋填格；滿一輪換金幣、清空本輪身分並重洗
+        species = json.loads(row.unlocked_species) if row.unlocked_species else []
+        if 0 <= log.pokemon_index < FULL_POOL_SIZE:
+            species.append(LEGENDARY_POOL_IDS[log.pokemon_index])
         row.unlocked_count += 1
         if row.unlocked_count >= ROUND_SIZE:
             coins_gained = row.unlocked_count // ROUND_SIZE
             row.unlocked_count = row.unlocked_count % ROUND_SIZE
             row.coins += coins_gained
             row.slot_order = _make_slot_order()
+            species = []
+        row.unlocked_species = json.dumps(species)
 
     db.commit()
     db.refresh(row)
@@ -490,6 +570,7 @@ def reset_collection_state(db: Session = Depends(get_db)) -> None:
     row.coins = 0
     row.courage_bands = 0
     row.wild_collection = "[]"
+    row.unlocked_species = "[]"
     row.slot_order = _make_slot_order()  # 重置時產生新隨機排列
     db.commit()
 

@@ -217,6 +217,9 @@ const LEGENDARY_POOL = [
   { id: 1025, name: "皮查路特" },
 ];
 
+// species_id → LEGENDARY_POOL 索引（身分制圖鑑渲染用）
+const LEGENDARY_INDEX_BY_ID = new Map(LEGENDARY_POOL.map((p, i) => [p.id, i]));
+
 // 野生圖鑑（30 隻有 Gmax 型態，可用極巨腕帶巨大化）。
 // ⚠️ 陣列順序須與後端 WILD_POOL_IDS 完全一致（pokemon_index 兩邊共用）。
 const wildArt = (id: number) =>
@@ -502,6 +505,8 @@ export function DryPantsApp() {
   const [energy, setEnergy] = useState(0);
   const [coins, setCoins] = useState(0);
   const [unlockedCount, setUnlockedCount] = useState(0);
+  // 身分制：本輪已捕獲的傳說 species_id（順序＝捕獲順序），圖鑑已解鎖格以此為準
+  const [unlockedSpecies, setUnlockedSpecies] = useState<number[]>([]);
   const [slotOrder, setSlotOrder] = useState<number[]>(
     () => Array.from({ length: ROUND_SIZE }, (_, i) => i)
   );
@@ -533,6 +538,7 @@ export function DryPantsApp() {
       .then(([state, entries, log, courage]) => {
         setEnergy(state.energy);
         setUnlockedCount(state.unlocked_count);
+        setUnlockedSpecies(state.unlocked_species ?? []);
         setCoins(state.coins);
         setSlotOrder(state.slot_order);
         setCourageBands(state.courage_bands ?? 0);
@@ -561,12 +567,13 @@ export function DryPantsApp() {
         unlocked_count: unlockedCount,
         coins,
         slot_order: slotOrder,
+        unlocked_species: unlockedSpecies,
       }).catch(() => {});
     }, 600);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [energy, unlockedCount, coins, slotOrder]);
+  }, [energy, unlockedCount, coins, slotOrder, unlockedSpecies]);
 
   const showMsg = (msg: string, ms = 2500) => {
     if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
@@ -581,12 +588,25 @@ export function DryPantsApp() {
     if (newTotal > ROUND_SIZE) {
       const coinsGained = Math.floor(newTotal / ROUND_SIZE);
       const remainder = newTotal % ROUND_SIZE;
+      const newOrder = makeSlotOrder(); // 新一輪：重新隨機抽 30 隻
       setUnlockedCount(remainder);
-      setSlotOrder(makeSlotOrder()); // 新一輪：從 94 隻裡重新隨機抽 30 隻
+      setSlotOrder(newOrder);
+      // 身分制：新一輪的餘格身分取自新排列前綴
+      setUnlockedSpecies(
+        newOrder.slice(0, remainder).map((i) => LEGENDARY_POOL[i].id)
+      );
       setCoins((c) => c + coinsGained);
       showMsg(gainMsg ?? `🌈 集齊傳說！清空兌換 ${coinsGained} 顆扭蛋！`, 3500);
     } else {
       setUnlockedCount(newTotal);
+      // 身分制：把本次解鎖格（slot_order 位置 unlockedCount..newTotal）的物種記入清單
+      setUnlockedSpecies((prev) => [
+        ...prev,
+        ...slotOrder
+          .slice(prev.length, newTotal)
+          .map((i) => LEGENDARY_POOL[i]?.id)
+          .filter((id): id is number => id !== undefined),
+      ]);
       showMsg(gainMsg ?? `🌟 解鎖了 ${safeN} 隻傳說寶可夢！`);
     }
   };
@@ -935,7 +955,7 @@ export function DryPantsApp() {
                   <>
                     <div className="mb-3 flex items-center justify-between">
                       <h2 className="text-sm font-black text-slate-800">
-                        🏆 傳說寶可夢 ({unlockedCount}/{ROUND_SIZE})
+                        🏆 傳說寶可夢 ({unlockedSpecies.length}/{ROUND_SIZE})
                       </h2>
                       <span className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-900 ring-2 ring-violet-400">
                         <img src={LUCKY_EGG_IMG} alt="扭蛋幣" className="h-4 w-4" />
@@ -943,9 +963,22 @@ export function DryPantsApp() {
                       </span>
                     </div>
                     <div className="grid grid-cols-6 gap-1.5">
-                      {slotOrder.map((poolIndex, i) => (
-                        <PokeTile key={poolIndex} index={poolIndex} unlocked={i < unlockedCount} />
-                      ))}
+                      {slotOrder.map((poolIndex, i) => {
+                        // 身分制：已解鎖格顯示「當初捕獲的物種」（unlockedSpecies），
+                        // 不再由 slot_order 位置推算——slot_order 重洗不影響已捕獲格。
+                        const capturedId = unlockedSpecies[i];
+                        const displayIndex =
+                          capturedId !== undefined
+                            ? LEGENDARY_INDEX_BY_ID.get(capturedId) ?? poolIndex
+                            : poolIndex;
+                        return (
+                          <PokeTile
+                            key={`${i}-${displayIndex}`}
+                            index={displayIndex}
+                            unlocked={capturedId !== undefined}
+                          />
+                        );
+                      })}
                     </div>
                   </>
                 ) : (
@@ -1599,6 +1632,7 @@ export function DryPantsApp() {
               const fresh = await fetchCollectionState().catch(() => null);
               setEnergy(0);
               setUnlockedCount(0);
+              setUnlockedSpecies([]);
               setCoins(0);
               setHonorEntries([]);
               setTodayLog(null);        // 清掉今日巡邏 → 可立即重新測試巡邏
